@@ -14,12 +14,43 @@ deploying into hostile territory.
 
 This framework reads files from SPIFFS arranged in a familiar unix-like structure:
 
-/etc/hostname  - single string entry of the machine hostname
+/etc/hostname  - single line entry of the machine hostname
 /etc/ap        - JSON file containing the station name and password for the Access Point served by the microcontroller
 /etc/htaccess  - JSON file containing the username and password for http authentication (used by the file manager)
 
 /wifi/ap/<name> - JSON configuration files for named access points, their passwords and other metadata.
 /wifi/mac/<address> - JSON configuration files for identified access points, their passwords and other metadata.
+
+To pre-configure the device to connect to a particular network, just create a file in /wifi/ap with the same name as
+the network, and JSON contents in the following format:
+
+{
+	"password":"shamballa",
+	"priority":2,
+	"auto":true,
+	"ota":true,
+	"fx":"pulse"
+}
+
+On startup, if no hard-coded SSID/password is provided (that's still allowed) a scan is done and the configured access point with
+the highest priority and signal strength (that is marked "auto":true) is picked.
+
+If the connection fails, other (less high-scored) access points should be tried in sequence. Currently it only performs this "fallback" during
+initial and manual "search" connections. Once it succeeds in connecting to an access point, it will not automatically change to another. 
+(That needs fixing with some kind of timeout.) 
+
+In this way you can pre-configure your devices to connect to a range of networks without needing to be in range to do it.
+
+
+You can also configure the network from the Web interface. 
+
+Connect to the access point (The default SSID/password is "Agomotto"/"shamballa") from a mobile device, and then go to the web page:
+http://192.168.4.1
+
+This access point is always running, even when the ESP8266 is connected to a "host" AP of it's own. So you can configure the WiFi 
+_from_ WiFi, which is a really neat trick.
+
+
 
 
 built on top of the AsyncTCP Library
