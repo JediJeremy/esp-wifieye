@@ -14,12 +14,12 @@ deploying into hostile territory.
 
 This framework reads files from SPIFFS arranged in a familiar unix-like structure:
 
-/etc/hostname  - single line entry of the machine hostname
-/etc/ap        - JSON file containing the station name and password for the Access Point served by the microcontroller
-/etc/htaccess  - JSON file containing the username and password for http authentication (used by the file manager)
+  * /etc/hostname  - single line entry of the machine hostname
+  * /etc/ap        - JSON file containing the station name and password for the Access Point served by the microcontroller
+  * /etc/htaccess  - JSON file containing the username and password for http authentication (used by the file manager)
 
-/wifi/ap/<name> - JSON configuration files for named access points, their passwords and other metadata.
-/wifi/mac/<address> - JSON configuration files for identified access points, their passwords and other metadata.
+  * /wifi/ap/<name> - JSON configuration files for named access points, their passwords and other metadata.
+  * /wifi/mac/<address> - JSON configuration files for identified access points, their passwords and other metadata.
 
 To pre-configure the device to connect to a particular network, just create a file in /wifi/ap with the same name as
 the network, and JSON contents in the following format:
