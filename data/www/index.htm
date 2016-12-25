@@ -1,0 +1,926 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href=/apple-touch-icon.png rel=apple-touch-icon> <link href=/favicon.ico rel=icon>
+
+<!-- jQuery -->
+<script src="js/jquery-3.1.1.min.js"></script>
+<!-- Bootstrap 3.3.7 -->
+<link rel="stylesheet" href="css/bootstrap.min.css"></link>
+<!--<link rel="stylesheet" href="css/theme.min.css"></link> -->
+<script src="js/bootstrap-3.3.7.min.js"></script>
+
+<script type="text/javascript">
+	// websocket interface to server 
+    var ws = null;
+    function ge(s){ return document.getElementById(s);}
+    function ce(s){ return document.createElement(s);}
+    function stb(outer,inner){
+    	// outer = outer || $("#messages-scroll");
+    	// inner = inner || $("#messages-list");
+    	// outer.scrollTo( inner.height() );
+    	// $("#messages-input").get(0).scrollIntoView();
+    	$("#messages-scroll").scrollTop( 100000 ); // scroll as much as possible
+    }
+	function update_progress_bar(id, p, t) {
+   		if(typeof(p)==='number') {
+    		$(id).css({ width:''+p+'%', 'aria-valuenow':p }).text(t || ''+p+'%');
+      	}
+	}
+    function sendBlob(str){
+      var buf = new Uint8Array(str.length);
+      for (var i = 0; i < str.length; ++i) buf[i] = str.charCodeAt(i);
+      ws.send(buf);
+    }
+    function addMessage(m,style){
+      var msg = $('<li class="list-group-item">'); 
+      msg.text(m); // set message text
+      msg.attr('time', +(new Date) ); // set current time
+      msg.addClass( style ); // add styles
+      $("#messages-list").append(msg);
+      // msg.innerText = m;
+      // ge("messages").appendChild(msg);
+      stb();
+    }
+    function startSocket(){
+      ws = new WebSocket('ws://'+document.location.host+'/ws',['arduino']);
+      ws.binaryType = "arraybuffer";
+      ws.onopen = function(e){
+        addMessage("Connected",'text-success');
+      };
+      ws.onclose = function(e){
+        addMessage("Disconnected",'text-warning');
+      };
+      ws.onerror = function(e){
+        console.log("ws error", e);
+        addMessage("Error",'text-warning');
+      };
+      ws.onmessage = function(e){
+        var msg = "";
+        if(e.data instanceof ArrayBuffer){
+          msg = "BIN:";
+          var bytes = new Uint8Array(e.data);
+          for (var i = 0; i < bytes.length; i++) {
+            msg += String.fromCharCode(bytes[i]);
+          }
+        } else {
+          msg = "TXT:"+e.data;
+        }
+        addMessage(msg);
+      };
+      var send_input = ge("message-send");
+      send_input.onkeydown = function(e){
+        stb();
+        if(e.keyCode == 13 && send_input.value != ""){
+          ws.send(send_input.value);
+          send_input.value = "";
+        }
+      }
+    }
+    function startEvents(){
+      var es = new EventSource('/events');
+      es.onopen = function(e) {
+        addMessage("Events Opened",'text-success');
+      };
+      es.onerror = function(e) {
+        if (e.target.readyState != EventSource.OPEN) {
+          addMessage("Events Closed",'text-warning');
+        }
+      };
+      es.onmessage = function(e) {
+        addMessage(e.data);
+      };
+      es.addEventListener('ota', function(e) {
+        addMessage(e.data);
+        // show the OTA alert and update it's progress
+        var json = JSON.parse(e.data);
+        if(json.ota) {
+        	$('#ota-dialog').modal({show:true});
+        	update_progress_bar('#ota-progress-bar', json.ota.progress);
+        }      
+      }, false);
+      es.addEventListener('scan', function(e) {
+        addMessage(e.data,'text-info');
+        // update the scan list
+        var json = JSON.parse(e.data);
+        if(json.scan) {
+        	if(json.scan.start) scan_start(json.scan);
+        	if(json.scan.bssid) scan_station(json.scan);
+        	if(json.scan.complete) scan_complete(json.scan);
+        	if(json.scan.state) scan_state(json.scan);
+        }
+      }, false);
+      es.addEventListener('servo', function(e) {
+        addMessage(e.data,'text-info');
+        // update the scan list
+        var json = JSON.parse(e.data);
+        if(json.servo) {
+        	if(json.servo.state) servo_state(json.servo);
+        }
+      }, false);
+      es.addEventListener('log', function(e) {
+        addMessage(e.data,'text-info');
+        // update the scan list
+        var json = JSON.parse(e.data);
+        if(json.log) {
+        	if(json.log.state) logging_state(json.log);
+	        if(json.log.storage) logging_storage(json.log);
+        }
+      }, false);
+      es.addEventListener('wifi', function(e) {
+        addMessage(e.data,'text-info');
+        // update the scan list
+        var json = JSON.parse(e.data);
+        if(json.wifi) {
+        	if(json.wifi.event) wifi_event(json.wifi);
+        }
+      }, false);
+      es.addEventListener('status', function(e) {
+        addMessage(e.data,'text-info');
+        // update UI status
+        var json = JSON.parse(e.data);
+        status_update(json.status);
+      }, false);
+    }
+    
+    function clear_old_messages(age_minutes) {
+    	age_minutes = age_minutes || 1; // 1 minute default
+    	// how long do we keep messages?
+    	var then = +(new Date) - age_minutes * 60 * 1000;
+    	// go through the message and remove old ones
+    	$('#messages-list > li').each(function(i,v) {
+    		var e = $(this);
+    		if(+e.attr('time') <= then) e.remove();
+    	});
+    }
+    // clear old messages every ten seconds
+    setInterval(clear_old_messages, 10*1000);
+</script>
+<script>
+	//
+    function status_update(status) {
+        if(status.rssi) {
+        	var p = 100 + status.rssi;
+        	if(p<0) p = 0;
+        	if(p>100) p = 100;        	
+        	update_progress_bar('#signal-progress-bar', p, ''+status.rssi+'dBm');
+        }
+        if(status.vcc) {
+        	var p = Math.round(status.vcc / 4096 * 10000)/100;
+        	update_progress_bar('#voltage-progress-bar', p, ''+p+'%');
+        }
+        if(status.wifi) {
+        	if(status.wifi.connected_ssid) {
+        		$("#connected-ssid").text(status.wifi.connected_ssid);
+        	}
+        	if(status.wifi.local_ip) {
+        		$("#local-ip").text(status.wifi.local_ip);        		
+        	}
+        }
+	}
+	
+	function wifi_event(message) {
+		switch(message.event) {
+			case 'ap_disconnect':
+				update_progress_bar('#signal-progress-bar', 0, '');
+				$('#connected-ssid').text('');
+				$('#local-ip').text('');
+				break;
+			case 'ap_connect':
+				$('#connected-ssid').text(message.ssid || message.bssid);
+				$('#local-ip').text(message.ip);
+				break;
+			case 'ap_gotip':
+				$('#local-ip').text(message.ip);
+				break;
+		}
+	}
+	
+
+	// scan list management
+	var scan_list = [];
+	var scan_id = {};
+	
+	function scan_start(scan) {
+   		$('#scan-status').text("scanning");
+   		scan_list = [];
+	}
+	
+	function scan_station(scan) {
+		// add this station to the scan list for now
+		scan_list.push(scan);
+	}
+	
+	function station_dialog(e,ap) {
+		$('#ap-dialog-title').text(ap.ssid);
+		$('#ap-dialog-ssid').val(ap.ssid);
+		$('#ap-dialog-bssid').text(ap.bssid);
+		$('#ap-dialog-password').val("********");
+		$('#ap-dialog-auto').prop('checked',!!ap.auto);		
+		$('#ap-dialog-ota').prop('checked',!!ap.ota);		
+		$('#ap-dialog-fx').val(ap.fx);
+		$('#ap-dialog-priority').val(ap.priority || 0);
+		$('#ap-dialog-priority-text').text(ap.priority || '0');
+		// show the dialog
+		$('#ap-dialog').modal({show:true});
+	}
+	
+	function scan_complete(scan) {
+   		$('#scan-status').empty()        		
+		// copy all the scan information to the ui
+		var list = $('#scan-list');
+   		list.empty();
+   		for(var i in scan_list) (function(i){
+   			var e = scan_list[i];
+   			var tr = $('<div class="scan-row row">');
+   			// name
+   			var td1 = $('<div class="scan-ssid col-md-5 col-xs-5">').appendTo(tr);
+   			td1.text(e.ssid);
+   			// is this the current access point?
+   			if(e.ap) {
+   				if(e.ota) { // perhaps check current mode instead?
+	   				// use ota icon
+	   				td1.append('&nbsp;<span class="glyphicon glyphicon-cog" aria-hidden="true"></span>'); 				
+	   			} else {
+	   				// mark current access point
+	   				td1.append('&nbsp;<span class="glyphicon glyphicon-ok" aria-hidden="true"></span>');	   				
+	   			}
+   				// change the row style
+   				tr.addClass('scan-row-ap');
+   			} else {
+   				if(e.auto) {
+	   				// mark the access point as being on the autoconnect list
+	   				td1.append('&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>');			
+	   			}
+   			}
+   			// signal strength
+   			var td5 = $('<div class="scan-rssi col-md-2 col-xs-2">').appendTo(tr);
+   			var rssi_dbm = ''+e.rssi + 'dBm';
+   			var rssi_perc = 100 + e.rssi; rssi_perc = Math.min(100,Math.max(0,rssi_perc));
+   			var rssi_html = '<div class="progress-bar" role="progressbar" aria-valuenow="'+rssi_perc+'" aria-valuemin="0" aria-valuemax="100" style="width:'+rssi_perc+'%;">'+rssi_dbm+'</div>'
+   			td5.append($(rssi_html));
+   			// channel
+   			var td4 = $('<div class="scan-channel col-md-1 col-xs-1 text-right">').appendTo(tr);
+   			td4.text(e.channel);
+   			// encryption
+   			var td3 = $('<div class="scan-encrypt col-md-1 col-xs-1">').appendTo(tr);
+   			td3.text(e.encrypt);
+   			/* if(e.encrypt!=='none') {
+   				// mark the access point as being on the autoconnect list
+   				td3.prepend('&nbsp;<span class="glyphicon glyphicon-lock" aria-hidden="true"></span>');			
+   			} */
+   			// mac address
+   			var td2 = $('<div class="scan-bssid col-md-2 col-xs-2">').appendTo(tr);
+   			td2.text(e.bssid);
+   			// make the row visible
+   			list.append(tr);
+   			// and add the click handler to open the dialog
+   			tr.on('click',function() {
+   				station_dialog($(this), e);
+   			});
+   		})(i);
+	}
+	
+	
+	var scan_state_option = {
+		'started' : 'start',
+		'stopped' : 'stop',
+	};
+	
+	function scan_state(message) {
+   		$('#scan-mode').val(scan_state_option[message.state]);
+	}
+
+	var servo_state_option = {
+		'started' : 'manual',
+		'stopped' : 'stop',
+	};
+
+	function servo_state(message) {
+   		$('#servo-mode').val(servo_state_option[message.state]);
+	}
+	
+	var logging_state_option = {
+		'started' : 'start',
+		'stopped' : 'stop',
+	};
+
+	function logging_state(message) {
+   		$('#logging-mode').val(logging_state_option[message.state]);
+	}
+	
+	function logging_storage(message) {
+		var total = message.storage.total || 1;
+		var used = message.storage.used || 0;
+		var per = 100 - (used / total * 100); // turn it into storage available
+   		$('#storage-progress-bar')
+   			.attr('aria-currentvalue',per)
+   			.css({ width:''+per+'%', title:''+used+'/'+total })
+   			.text(''+(Math.round(per*100)/100)+'%');
+	}
+	
+	function json_dialog(url) {
+		// clear the dialog to the "loading" content
+		var content = $('#json-dialog-content');
+		content.html('<div>loading...</div>');
+		$('#json-dialog-title').text(url);
+		// show the dialog
+		$('#json-dialog').modal({show:true});
+        // begin the ajax call
+        $.ajax({
+        	url: url,
+        	error: function(jqXHR, textStatus) { 
+        		content.html('<div>error</div>'); 
+        		$('<div class="error">').appendTo(content).text(textStatus); 
+        	},
+        	success: function(m) {
+        		content.empty();
+        		if(typeof(m)==='string') {
+	        		$('<pre>').appendTo(content).text(m);         		    			
+        		} else {
+        			$('<pre>').appendTo(content).text(JSON.stringify(m,null,2));       
+        		}
+        	}
+        })
+	}
+	
+	
+	function config_dialog() {
+		// disable all the primary buttons
+		$('#config-dialog .btn-primary').attr('disabled',true);
+		// show the dialog
+		$('#config-dialog').modal({show:true});
+        // get the system status again
+        $.ajax({
+        	url: 'system/config',
+        	error: function(jqXHR, textStatus) {
+				$('#config-dialog').modal({show:false});
+        		console.error(textStatus);
+        	},
+        	success: function(m) {
+        		// copy all the values
+        		$('#config-dialog-hostname').val(m.system.config.host_name);
+        		$('#config-dialog-wifiname').val(m.system.config.wifi_name);
+        		$('#config-dialog-wifipassword').val(m.system.config.wifi_password ? '********':'');
+        		$('#config-dialog-htname').val(m.system.config.htaccess_username);
+        		$('#config-dialog-htpassword').val(m.system.config.htaccess_password ? '********':'');
+        		// enable all the buttons
+				$('#config-dialog .btn-primary').attr('disabled',false);
+        	}
+        })
+	}
+	
+	function ui_status(message) {
+		var status = message.ui.status;
+		if(status) {
+			status_update(status);
+			scan_state(status.scan);
+			logging_state(status.log);
+			logging_storage(status);
+		}
+	}
+
+	function dialog_password(field_id,lacuna) {
+		// get the string value of the password field
+		var s = $(field_id).val();
+		// test if it is purely made from '*' placeholder characters (indicating they changed nothing)
+		var stars = !!s;
+		for(var i=0, ic=s.length; i<ic; i++) {
+			if( s[i]!='*') stars = false;
+		}
+		if(stars) return undefined;
+		return s;
+	}
+	
+	function ap_dialog_action(mode) {
+		// start the message
+		var m = {"wifi":{"mode":mode}};
+       	m.wifi.ssid = $('#ap-dialog-ssid').val();
+       	m.wifi.bssid = $('#ap-dialog-bssid').text();
+       	// get the password
+       	var pass = dialog_password('#ap-dialog-password');
+       	if(pass !== undefined ) {
+        	m.wifi.password = pass;        		
+       	}
+       	m.wifi.priority = $('#ap-dialog-priority').val();
+       	m.wifi.auto = $('#ap-dialog-auto').is(':checked');
+       	m.wifi.ota = $('#ap-dialog-ota').is(':checked');
+       	m.wifi.fx = $('#ap-dialog-fx').val();
+       	console.log(JSON.stringify(m));
+		ws.send(JSON.stringify(m));	
+	}
+	
+	$(function() {
+		startSocket();
+      	startEvents();
+		// attach handlers
+		$('#servo\\.1').on('input', function(e,v) {
+			var v = $('#servo\\.1').val();
+			var spd = $('#servo\\.speed\\.1').val();
+			var m = {"servo":{}};
+			m["servo"]["1"] = {"pos":v, "speed":spd || 1000}
+			// 
+			ws.send(JSON.stringify(m));
+		})
+		// 
+		$('#servo\\.2').on('input', function(e,v) {
+			var v = $('#servo\\.2').val();
+			var spd = $('#servo\\.speed\\.2').val();
+			var m = {"servo":{}};
+			m["servo"]["2"] = {"pos":v, "speed":spd || 1000}
+			// 
+			ws.send(JSON.stringify(m));
+		})
+		$('#scan-mode').on('change', function(e,v) {
+			var v = $(e.target).val();
+			var m = {"scan":{"mode":v}};
+			ws.send(JSON.stringify(m));			
+		});
+		$('#servo-mode').on('change', function(e,v) {
+			var v = $(e.target).val();
+			var m = {"servo":{"mode":v}};
+			ws.send(JSON.stringify(m));			
+		});
+		$('#logging-mode').on('change', function(e,v) {
+			var v = $(e.target).val();
+			var m = {"log":{"mode":v}};
+			ws.send(JSON.stringify(m));	
+		});
+		$('#action-system-status').on('click', function() {
+			json_dialog('system/status');
+		});
+		$('#action-wifi-status').on('click', function() {
+			json_dialog('wifi/status');
+		});
+		$('#action-servo-status').on('click', function() {
+			json_dialog('servo/status');
+		});
+		$('#action-ui-status').on('click', function() {
+			json_dialog('ui/status');
+		});
+		$('#action-storage-clear').on('click', function() {
+			var m = {"log":{"clear":"all"}};
+			ws.send(JSON.stringify(m));	
+		});
+		$('#ap-dialog-priority').on('input', function() {
+			var v = $('#ap-dialog-priority').val();
+			$('#ap-dialog-priority-text').text(v || '0');			
+		});
+        // select the entire contents on focus
+		$('#ap-dialog-password').on('focus', function() {
+		    var e = $(this)
+		        .one('mouseup.mouseupSelect', function() {
+		            e.select();
+		            return false;
+		        })
+		        .one('mousedown', function() {
+		            // compensate for untriggered 'mouseup' caused by focus via tab
+		            e.off('mouseup.mouseupSelect');
+		        })
+		        .select();
+		});
+        $('#action-ap-connect').on('click', function() {
+        	ap_dialog_action("connect");
+		});
+        $('#action-ap-save').on('click', function() {
+        	ap_dialog_action("save");
+		});
+        $('#action-configuration').on('click', config_dialog);
+ 		$('#action-config-host-save').on('click', function() {
+			ws.send(JSON.stringify({"config":{
+				"hostname":$('#config-dialog-hostname').val()
+			}}));
+        });
+        $('#action-config-wifi-save').on('click', function() {
+			ws.send(JSON.stringify({"config":{
+				'ap':{
+					"ssid":$('#config-dialog-wifiname').val(),
+					"password":dialog_password('#config-dialog-wifipassword')
+				}
+			}}));
+        });
+        $('#action-config-htaccess-save').on('click', function() {
+			ws.send(JSON.stringify({"config":{
+				'htaccess':{
+					"username":$('#config-dialog-htname').val(),
+					"password":$('#config-dialog-htpassword').val()
+				}
+			}}));
+        });  
+        $('#action-wifi-reconnect').on('click', function() {
+			ws.send(JSON.stringify({"wifi":{
+				'mode':'reconnect'
+			}}));
+        });  
+		// request the current ui status and then update
+		$.ajax({
+        	url: 'ui/status',
+        	error: function(jqXHR, textStatus) { },
+        	success: ui_status
+        })
+	});
+</script>
+<style>
+	body { background-color:#463B26; }
+	.ui-section {  }
+	.ui-section > .well { overflow-y:scroll; height:100%; margin:0; }
+	.ui-section > .well > .row { margin-left:0; margin-right:0; }
+	#section-scan { position:absolute; left:5%; right:5%; top:3%; height:35%; }
+	#section-servo { position:absolute; left:5%; right:55%; top:40%; height:30%; }
+	#section-status { position:absolute; left:55%; right:5%; top:40%; height:30%; }
+	#section-console { position:absolute; left:5%; right:5%; bottom:3%; height:25%; }
+	#section-console .list-group { font-size:10px; }
+	#section-console .list-group-item { font-size:10px; padding:1px; 6px; }
+	
+	#scan-table { width:100%; padding:2px; background-color:#444; }
+	.scan-row { color:#fff; }
+	.scan-row-ap { color:#ffc; }
+	.scan-row:hover { background-color:#000; cursor:pointer; }
+   	/* .scan-ssid { width:30%; font-weight:bold; }
+   	.scan-bssid { width:30%; color:#ccc; }
+   	.scan-channel { width:10%; font-weight:bold; }
+   	.scan-encrypt { width:10%; color:#ccc; }
+   	.scan-rssi { width:20%; } */
+   	.scan-ssid { font-weight:bold; }
+   	.scan-bssid { color:#ccc; }
+   	.scan-channel { font-weight:bold; }
+   	.scan-encrypt { color:#ccc; }
+   	.scan-rssi {  }
+	.scan-row .progress-bar { margin:1px; }
+   	
+   	#scan-status { text-align:center; color:#888; }
+   	.ui-progress { margin:1px 6px; padding:0; background-color:#666; }
+   	.ui-progress-icon { padding-top:2px; }
+   	
+</style>
+</head>
+<body>
+<!-- system config dialog -->
+<div id="config-dialog" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Configuration</h4>
+      </div>
+      <div class="modal-body form-horizontal">
+		  <input type="hidden" id="ap-dialog-ssid" />
+		  <div class="form-group form-group-sm">
+		    <div class="col-xs-8"><h4>System</h4></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-md-2"><label for="config-dialog-hostname">hostname</label></div>
+		    <div class="col-md-8"><input id="config-dialog-hostname" class="form-control" /></div>
+	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-host-save">Save</button></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-xs-8"><h4>WiFi Access Point</h4></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-md-2"><label for="config-dialog-wifiname">name</label></div>
+		    <div class="col-md-8"><input id="config-dialog-wifiname" class="form-control"/></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-md-2"><label for="config-dialog-wifipassword">password</label></div>
+		    <div class="col-md-8"><input id="config-dialog-wifipassword" class="form-control" value="********" /></div>
+	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-wifi-save">Save</button></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-xs-8"><h4>HTTP Authorization</h4></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-md-2"><label for="config-dialog-htname">name</label></div>
+		    <div class="col-md-8"><input id="config-dialog-htname" class="form-control"/></div>
+		  </div>
+		  <div class="form-group form-group-sm">
+		    <div class="col-md-2"><label for="config-dialog-htpassword">password</label></div>
+		    <div class="col-md-8"><input id="config-dialog-htpassword" class="form-control" value="********" /></div>
+	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-htaccess-save">Save</button></div>
+		  </div>		 	
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- access point dialog -->
+<div id="ap-dialog" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 id="ap-dialog-title" class="modal-title"></h4>
+      </div>
+      <div class="modal-body form-horizontal">
+		  <input type="hidden" id="ap-dialog-ssid" />
+		  <!--  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-ssid">SSID</label></div>
+		    <div class="col-xs-10" id="ap-dialog-ssid"></div>
+		  </div>  -->
+		  <!--
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-bssid">Password</label></div>
+		    <div class="col-xs-10"><input id="ap-dialog-password" class="form-control" value="********" /></div>
+		  </div>
+		  <div class="form-group">
+		    <div class="col-xs-4"></div>
+		    <div class="col-xs-4"><button id="action-ap-connect" class="btn btn-default btn-block" type="submit">Connect</button></div>
+		    <div class="col-xs-4"><button id="action-ap-savepass" class="btn btn-default btn-block" type="submit">Save</button></div>
+		  </div>
+		  -->
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-bssid">BSSID</label></div>
+		    <div class="col-xs-10" id="ap-dialog-bssid"></div>
+		  </div>
+		  <!--<div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-encrypt">Encryption</label></div>
+		    <div class="col-xs-10" id="ap-dialog-encrypt"></div>
+		  </div>-->
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-password">Password</label></div>
+		    <div class="col-xs-8"><input id="ap-dialog-password" class="form-control" value="********" /></div>
+		  </div>
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-priority">Priority</label></div>
+		    <div class="col-xs-8" ><input id="ap-dialog-priority" type="range" min="0" max="10" value="5" /></div>
+		    <div class="col-xs-1"><label id="ap-dialog-priority-text"></label></div>
+		  </div>
+		  <div class="form-group">
+		    <div class="col-xs-2"></div>
+		    <div class="col-xs-8">
+		    	<label><input  id="ap-dialog-auto" type="checkbox">&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>&nbsp;Auto&nbsp;Connect</label><br/>
+		    	<label><input  id="ap-dialog-ota" type="checkbox">&nbsp;<span class="glyphicon glyphicon-cog" aria-hidden="true"></span>&nbsp;OTA&nbsp;Updates</label><br/>
+		    </div>
+		    
+		    
+		  </div>
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-fx">FX</label></div>
+		    <div class="col-xs-8" ><select id="ap-dialog-fx" class="form-control input-sm">
+			  <option value="none">none</option>
+			  <option value="pulse">pulse</option>
+			  <option value="track">track</option>
+			  <option value="happy">happy</option>
+			  <option value="angry">angry</option>
+			</select></div>
+		  </div>
+		 	
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="action-ap-connect" data-dismiss="modal">Connect</button>
+        <button type="button" class="btn btn-default" id="action-ap-save" data-dismiss="modal">Save</button>
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ajax / json dialog -->
+<div id="json-dialog" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 id="json-dialog-title" class="modal-title"></h4>
+      </div>
+      <div id="json-dialog-content" class="modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Confirm log delete -->
+<div id="clearlog-dialog" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Confirm Delete</h4>
+      </div>
+      <div class="modal-body">
+      	<p>Please confirm you wish to delete all the log files.</p> 
+      </div>
+      <div class="modal-footer">
+        <button id="action-storage-clear" type="button" class="btn btn-warning" data-dismiss="modal">Delete</button>
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OTA update progress -->
+<div id="ota-dialog" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">OTA Update</h4>
+      </div>
+      <div class="modal-body">
+      	<p>An "Over The Air" update is in progress. Once complete, please wait for the device to restart, and then reload this page.</p> 
+      	<div class="progress">
+		  <div id="ota-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+		    0%
+		  </div>
+		</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- main ui form -->
+<div class="container">
+	<div id="section-scan" class="ui-section"><div class="well well-sm" style="overflow-y:scroll; background:#222;" >
+  		<div id="scan-list" class="container-fluid"></div>
+  		<div id="scan-status"></div>
+	</div></div>
+	<div id="section-servo" class="ui-section"><div class="well well-sm" style="background-color:#ccc;">
+		<div class="row">
+		  <table><tbody>
+		  	<tr>
+			  	<td></td>
+			  	<td width="60%" class="text-center">Servo Position</td>
+			  	<td>&nbsp;</td>
+		  		<td width="30%" class="text-center">Speed</td>
+		  	</tr><tr>
+			  	<td>1:</td>
+			  	<td width="60%"><input id="servo.1" type="range" min="0" max="180" /></td>
+			  	<td>&nbsp;</td>
+		  		<td width="30%"><input id="servo.speed.1" type="range" min="1" max="200" value="20" /></td>
+		  	</tr><tr>
+			  	<td>2:</td>
+		  		<td width="60%"><input id="servo.2" type="range" min="0" max="180" /></td>
+			  	<td>&nbsp;</td>
+		  		<td width="30%"><input id="servo.speed.2" type="range" min="1" max="200" value="20" /></td>
+		  	</tr>
+		  </tbody></table>
+		</div>
+		<div class="row">
+			<br/>
+		</div>
+		<div class="row">
+			<div class="col-md-3"><label>Servos</label></div>
+			<div class="col-md-4"><select id="servo-mode" class="form-control input-sm">
+			  <option value="stop">off</option>
+			  <option value="manual">manual</option>
+			</select></div>
+		</div>
+	<!-- 
+	  Scan Color:<br/>
+	  <input id="scan.r" type="range" min="0" max="255"  style="width:30%"/><br/>
+	  <input id="scan.g" type="range" min="0" max="255"  style="width:30%"/><br/>
+	  <input id="scan.b" type="range" min="0" max="255"  style="width:30%"/><br/>
+	   -->
+	</div></div>
+	<div id="section-status" class="ui-section"><div class="well well-sm container-fluid" style="background-color:#ccc;">
+		<div class="row">
+			<div class="col-xs-2 text-right ui-progress-icon"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span></div>
+			<div class="col-xs-8 progress ui-progress">
+			  <div id="voltage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+			    0%
+			  </div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-xs-2 text-right ui-progress-icon"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span></div>
+			<div class="col-xs-8 progress ui-progress">
+			  <div id="storage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+			    0%
+			  </div>
+			</div>
+		</div>
+		<div class="row">
+			<!-- <div class="col-xs-3"><label>RSSI</label></div> -->
+			<div class="col-xs-2 text-right  ui-progress-icon"><span class="glyphicon glyphicon-signal" aria-hidden="true"></span></div>
+			<div class="col-xs-8 progress ui-progress">
+			  <div id="signal-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+			    0%
+			  </div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-xs-2"></div>
+			<div class="col-xs-4" id="connected-ssid"></div>
+			<div class="col-xs-4" id="local-ip"></div>
+		</div>
+		<div class="row">
+			<br/>
+		</div>
+		<div class="row">
+			<div class="col-md-3"><label>Scan</label></div>
+			<div class="col-md-4"><select id="scan-mode" class="form-control input-sm">
+			  <option value="stop">off</option>
+			  <option value="start">active</option>
+			</select></div>
+			<div  class="col-md-4">			
+				<button id="action-wifi-reconnect" class="btn btn-default btn-sm btn-block" type="button">Reconnect</button>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-3"><label>Log</label></div>
+			<div class="col-md-4"><select id="logging-mode" class="form-control input-sm">
+			  <option value="stop">off</option>
+			  <option value="start">active</option>
+			</select></div>
+			<div  class="col-md-4">			
+				<button class="btn btn-default btn-sm btn-block" type="button" data-toggle="modal" data-target="#clearlog-dialog">Clear Logs</button>
+				<br/>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-xs-3 text-right"><label></label></div>
+			<div  class="col-xs-8">
+				<button id="action-configuration"  class="btn btn-default btn-sm btn-block" type="button">Config</button>		
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-xs-3 text-right"><label>Status</label></div>
+			<div  class="col-xs-8">
+				<a class="btn btn-default btn-sm" target="_blank" href="log.txt">Log</a>
+				<button id="action-system-status" class="btn btn-default btn-sm" type="button">System</button>
+				<button id="action-wifi-status" class="btn btn-default btn-sm" type="button">WiFi</button>
+				<button id="action-servo-status" class="btn btn-default btn-sm" type="button">Servo</button>
+				<button id="action-ui-status" class="btn btn-default btn-sm" type="button">UI</button>
+			</div>
+		</div>
+	</div></div>
+	<div id="section-console" class="ui-section"><div id="messages-scroll" class="well well-sm" style="overflow-y:scroll;">
+	  <div style="height:100%"></div>
+	  <ul id="messages-list" class="list-group" style="margin-bottom:0.25em;"></ul>
+	  <div id="messages-input class="text-middle"><label>$</label><input type="text" value="" id="message-send"  class="text-left" style="width:95%; line-height:1.2em; "></div>
+	</div></div>
+	<!--  <div id="debug" class="container"><div class="well">
+		
+	</div></div>  -->
+</div>
+<script>
+	// test the scan ui
+	$(function() {
+		// are we local
+		if(window.location.href.indexOf('file:')>=0) {
+			scan_start({"start":2875624}) ;
+			scan_station({"ssid":"unorthodox", "bssid":"00:0C:42:05:14:9C", "encrypt":"tkip", "channel":9, "rssi":-49, "ap":true, "otp":true, "priority":7, "fx":"good" });
+			scan_station({"ssid":"ESP-01", "bssid":"62:01:94:06:C6:2A", "encrypt":"none", "channel":9, "rssi":-38,  "priority":4, "auto":"true" });
+			scan_station({"ssid":"Craig", "bssid":"A0:63:91:C6:1C:CE", "encrypt":"ccmp", "channel":11, "rssi":-94 });
+			scan_complete({"complete":2877766});
+			
+			// do the ui prep
+			// 
+			ui_status({"ui": {
+			    "status": {
+			   	  "vcc":3140,
+			   	  "rssi":-54,
+			      "wifi": {
+			        "state": "started",
+			        "hostname": "Agomotto",
+			        "connected_ssid": "unorthodox",
+			        "ap_ip": "192.168.4.1",
+			        "ap_mac": "5e:cf:7f:23:db:56",
+			        "local_ip": "10.1.1.18",
+			        "local_mac": "5c:cf:7f:23:db:56"
+			      },
+			      "scan": {
+			        "state": "stopped"
+			      },
+			      "servos": [
+			        {
+			          "state": 0,
+			          "position": 1000,
+			          "target": 1000,
+			          "speed": 4,
+			          "timeout": 0
+			        },
+			        {
+			          "state": 0,
+			          "position": 1000,
+			          "target": 1000,
+			          "speed": 4,
+			          "timeout": 0
+			        }
+			      ],
+			      "log": {
+			        "state": "stopped",
+			        "url": "/log.txt"
+			      },
+			      "storage": {
+			        "total": 2949250,
+			        "used": 538395,
+			        "block_size": 8192,
+			        "page_size": 256,
+			        "max_open_files": 5,
+			        "max_path_length": 32
+			      }
+			  },
+			  "ok": true
+			}});
+	
+		}	
+	});
+
+</script>
+</body>
+</html>
