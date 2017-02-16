@@ -11,22 +11,29 @@ void servo_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonO
      id[0] = '1' + i;
      if(message[id].is<JsonObject&>()) {
        JsonObject& servo_update = message[id];
-       int pos = servo_update["pos"];
-       int spd = servo_update["speed"];
+       float pos = servo_update["pos"];
+       float move_v = servo_update["speed"];
+       float spd = dps_servo_speed(move_v); // convert from per-second to per-loop
        // move the servo
        servo_move(i,pos,spd);
        // client->printf("{\"servo\":\"moving\",\"ok\":true}");
        // make sure servo system is running (or start it up)
-       servos_state_change = SERVO_STATE_START;
+       servos_state_change = SERVO_STATE_ON;
      }
   }
-  // mode change?
-  String m_mode = message["mode"];
-  if(m_mode == "start") {
-      servos_state_change = SERVO_STATE_START;
-   } else if(m_mode == "stop") {
-      servos_state_change = SERVO_STATE_STOP;
+  // specific mode change?
+  if( message["mode"].is<const char *>() ) {
+    servos_state_change = string_servo_state( message["mode"] );
   }
+  /*
+  String m_mode = message["mode"];
+  if(m_mode == "on") {
+      servos_state_change = SERVO_STATE_ON;
+   } else if(m_mode == "off") {
+      servos_state_change = SERVO_STATE_OFF;
+   } else if(m_mode == "auto") {
+      servos_state_change = SERVO_STATE_AUTO;
+  } */
 }
 
 void scan_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonObject& message) {
@@ -109,6 +116,7 @@ void wifi_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonOb
     String m_ssid = message["ssid"];
     String m_bssid = message["bssid"];
     String m_fx = message["fx"];
+    String m_color = message["color"];
     int    m_priority = message["priority"];
     boolean m_auto = message["auto"];
     boolean m_ota = message["ota"];
@@ -124,11 +132,12 @@ void wifi_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonOb
     // good so far
     if(has_bssid) {
       char p[256];
-      sprintf(p,"{\n\t\"ssid\":\"%s\",\n\t\"password\":\"%s\",\n\t\"priority\":%d,\n\t\"fx\":\"%s\",\n\t\"auto\":%s,\n\t\"ota\":%s}", 
+      sprintf(p,"{\n\t\"ssid\":\"%s\",\n\t\"password\":\"%s\",\n\t\"priority\":%d,\n\t\"fx\":\"%s\",\n\t\"color\":\"%s\",\n\t\"auto\":%s,\n\t\"ota\":%s}", 
         m_ssid.c_str(),
         password.c_str(),
         m_priority,
         m_fx.c_str(), 
+        m_color.c_str(), 
         m_auto ? "true" : "false", 
         m_ota ? "true" : "false"
       );
@@ -174,6 +183,7 @@ void config_message(AsyncWebSocket * server, AsyncWebSocketClient * client, Json
   boolean do_hostname = false;
   boolean do_ap = false;
   boolean do_htaccess = false;
+  boolean do_fx = false;
   // hostname config?
   if(message["hostname"].is<const char*>()) {
     local_hostname = message["hostname"].asString();
@@ -190,6 +200,11 @@ void config_message(AsyncWebSocket * server, AsyncWebSocketClient * client, Json
       ap_password = ap["password"].asString();
       do_ap = true;
     }
+    if(ap["txpower"].is<double>() || ap["txpower"].is<int>()) {
+      ap_txpower = (double)ap["txpower"];
+      WiFi.setOutputPower(ap_txpower);
+      do_ap = true;
+    }
   }
   // htaccess config?
   if(message["htaccess"].is<JsonObject&>()) {
@@ -203,11 +218,44 @@ void config_message(AsyncWebSocket * server, AsyncWebSocketClient * client, Json
       do_htaccess = true;
     }
   }
+  // fx config?
+  if(message["fx"].is<JsonObject&>()) {
+    JsonObject& fx = message["fx"];
+    if(fx["servo_start"].is<const char*>()) {
+      fx_servo_start = fx["servo_start"].asString();
+      do_fx = true;
+    }
+    
+  }
   // save changed config files
   if(do_hostname) save_hostname(local_hostname);
-  if(do_ap) save_ap_config(ap_ssid,ap_password);
+  if(do_ap) save_ap_config(ap_ssid,ap_password,ap_txpower);
+  if(do_fx) save_fx_config();
   if(do_htaccess) save_htaccess_config(htaccess_username, htaccess_password);
-  
+  // servo config?
+  if(message["servo"].is<JsonObject&>()) {
+    JsonObject& servo = message["servo"];
+    // check each servo index
+    for(int index = 0; index<SERVO_COUNT; index++) {
+      String n = String(index+1);
+      if(servo[n].is<JsonObject&>()) {
+        JsonObject& servon = servo[n];
+        servo_config[index].pin = servon["pin"];
+        servo_config[index].min_micros = servon["min_micros"];
+        servo_config[index].max_micros = servon["max_micros"];
+        servo_config[index].zero_micros = servon["zero_micros"];
+        servo_config[index].unit_scaling = servon["unit_scaling"];
+        save_servo_config(index+1, servo_config[index]);
+      }
+    }
+  }
+}
+
+
+void fx_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonObject& message) {
+  if(message["pose"].is<const char *>()) {
+    fx_pose(message["pose"]);
+  }
 }
 
 void accept_json_message(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len) {
@@ -222,6 +270,9 @@ void accept_json_message(AsyncWebSocket * server, AsyncWebSocketClient * client,
     if(root["servo"].is<JsonObject&>()) {
       // servo update
       servo_message(server, client, root["servo"] );
+    } else if(root["fx"].is<JsonObject&>()) {
+      // fx update
+      fx_message(server, client, root["fx"] );
     } else if(root["wifi"].is<JsonObject&>()) {
       // wifi update
       wifi_message(server, client, root["wifi"] );

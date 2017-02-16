@@ -186,7 +186,7 @@ void load_json_then(String filename, int limit, std::function<void(JsonObject&)>
       data[r] = '\0'; // make sure the string is terminated
       file.close();
       // now parse the contents as json
-      StaticJsonBuffer<128> json;
+      StaticJsonBuffer<512> json;
       JsonObject& root = json.parse(data);
       if (root.success()) {
         return succeed(root);
@@ -205,7 +205,7 @@ void load_json_then(String filename, int limit, std::function<void(JsonObject&)>
 //
 void load_htaccess_config() {
   // open the file
-  load_json_then("/etc/htaccess", 1024, [](JsonObject& root){
+  load_json_then("/etc/htaccess.json", 1024, [](JsonObject& root){
     // success. look for the ssid and password fields
     String json_user = root["username"];
     if( json_user ) htaccess_username = json_user;      
@@ -213,14 +213,14 @@ void load_htaccess_config() {
     if( json_password ) htaccess_password = json_password;      
   }, [](){
     // failure.
-    //events.send("{\"error\":\"could not load config /etc/htaccess \"}");
+    //events.send("{\"error\":\"could not load config /etc/htaccess.json \"}");
   });
 }
 
 //
 void save_htaccess_config(String username, String password) {
   // open the file
-  File file = SPIFFS.open("/etc/htaccess", "w");
+  File file = SPIFFS.open("/etc/htaccess.json", "w");
   if(!file) {
     // could not open
     events.send("{\"error\":\"could not write\", \"file\":\"/etc/htaccess\"}");
@@ -231,39 +231,43 @@ void save_htaccess_config(String username, String password) {
     root["password"] = password;    
     root.printTo(file);
     file.close();
-    events.send("{\"message\":\"saved /etc/htaccess\"}");  
+    events.send("{\"message\":\"saved /etc/htaccess.json\"}");  
   }
 }
 //
 void load_ap_config() {
   // open the file
-  load_json_then("/etc/ap", 1024, [](JsonObject& root){
+  load_json_then("/etc/ap.json", 1024, [](JsonObject& root){
     // success. look for the ssid and password fields
     String json_ssid = root["ssid"];
     if( json_ssid ) ap_ssid = json_ssid;      
     String json_password = root["password"];
     if( json_password ) ap_password = json_password;
+    if(root["tx_power"].is<double>() || root["tx_power"].is<int>()) {
+      ap_txpower = (double)root["tx_power"];
+    }
   }, [](){
     // failure.
-    //events.send("{\"error\":\"could not load config /etc/ap \"}");
+    //events.send("{\"error\":\"could not load config /etc/ap.json \"}");
   });
 }
 
 //
-void save_ap_config(String ssid, String password) {
+void save_ap_config(String ssid, String password, float txpower) {
   // open the file
-  File file = SPIFFS.open("/etc/ap", "w");
+  File file = SPIFFS.open("/etc/ap.json", "w");
   if(!file) {
     // could not open
-    events.send("{\"error\":\"could not write\", \"file\":\"/etc/ap\"}");
+    events.send("{\"error\":\"could not write\", \"file\":\"/etc/ap.json\"}");
   } else {
     StaticJsonBuffer<200> json;
     JsonObject& root = json.createObject();
     root["ssid"] = ssid;
     root["password"] = password;
+    root["tx_power"] = (double)txpower;
     root.printTo(file);
     file.close();
-    events.send("{\"message\":\"saved /etc/ap\"}");  
+    events.send("{\"message\":\"saved /etc/ap.json\"}");  
   }
 }
 
@@ -306,3 +310,4 @@ String wifi_lookup_password(String ssid, String bssid, boolean has_bssid) {
   // default no password
   return String("");
 }
+

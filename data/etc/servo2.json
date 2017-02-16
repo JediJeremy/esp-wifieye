@@ -1,0 +1,7 @@
+{
+	"pin":12,
+	"min_micros":800,
+	"max_micros":1500,
+	"zero_micros":900,
+	"unit_scaling":-12.0
+}

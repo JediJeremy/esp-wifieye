@@ -178,17 +178,29 @@ void logging_clear_all() {
 }
 
 
+int scan_report_index = 0;
+int scan_tracking_index = -1;
+int scan_tracking_rssi = -200;
+CRGB scan_tracking_color = 0;
+
+int ap_count = 0;
+int ap_happy = 0;
+int ap_angry = 0;
+int ap_track = 0;
 
 
-/*
-#define SCAN_ARRAY_LENGTH   32
-String scan_ssid[SCAN_ARRAY_LENGTH];
-String scan_bssid[SCAN_ARRAY_LENGTH];
-int scan_channel[SCAN_ARRAY_LENGTH];
-int scan_rssi[SCAN_ARRAY_LENGTH];
-int scan_encryption[SCAN_ARRAY_LENGTH];
-*/
+// compose and send a scan start message
+void scan_start_event() {
+  // update pose during the scan
+  fx_pose("scan");
+  // report the scan to our clients
+  scan_time = millis();
+  char p[32];
+  sprintf(p, "{\"scan\":{\"start\":%u}}", scan_time );
+  events.send(p, "scan");
+}
 
+// the scan is complete, prepare to report
 void async_wifi_scan_complete() {
   char p[192];
   char json_name[128];
@@ -230,17 +242,18 @@ void async_wifi_scan_complete() {
   }
   // clear the search results before the reporting loop
   search_index = -1;
+  // clear the old search result
+  scan_tracking_index = -1;
+  scan_tracking_rssi = -200;
+  scan_tracking_color = 0;
+  // reset report item index
+  scan_report_index = 0;
+  // keep some stats
+  ap_count = 0;
+  ap_happy = 0;
+  ap_angry = 0;
+  ap_track = 0;
 }
-
-// compose and send a scan start message
-void scan_start_event() {
-  scan_time = millis();
-  char p[32];
-  sprintf(p, "{\"scan\":{\"start\":%u}}", scan_time );
-  events.send(p, "scan");
-}
-
-int scan_report_index = 0;
 
 void scan_report_event(int index) {
   char json_name[128];
@@ -282,37 +295,54 @@ void scan_report_event(int index) {
   boolean x_auto = false;
   int     x_priority = 0;
   String  x_fx = String("none");
+  String  x_color = String("");
   // did we find a file?
   boolean send_extended = false;
   if(file_found) {
     // // open the file
-    load_json_then(fn, 1024, [&x_ota,&x_auto,&x_priority,&x_fx,&send_extended](JsonObject& root){
+    load_json_then(fn, 1024, [&x_ota,&x_auto,&x_priority,&x_fx,&send_extended,&x_color](JsonObject& root){
       // success. look for the extended fields and send them too
       x_ota = root["ota"];
       x_auto = root["auto"];
       x_priority = root["priority"];
       x_fx = root["fx"].asString();
+      x_color = root["color"].asString();
       send_extended = true;
     }, [](){
       // failure.
       events.send("{\"error\":\"could not load config \"}");
     });
   }
+  // briefly flash the LED to the AP color as we 'see' it, use current color as fallback
+  LEDS.setBrightness(255);
+  leds[0] = parse_color_html(x_color.c_str(), leds[0]); LEDS.show();
+  // check if this entry is a tracking candidate
+  bool track = (x_fx == "track") || (x_fx == "happy") || (x_fx == "angry");
+  // [todo:] also check against explicit tracking lists?
+  // are we strongest?
+  int rssi = WiFi.RSSI(index);
+  if(track && (scan_tracking_rssi < rssi)) {
+    // then we're the new best option
+    scan_tracking_index  =  index;
+    scan_tracking_color  =  parse_color_html(x_color.c_str(), CRGB::Green);
+    scan_tracking_rssi  =  rssi;
+  }
   // broadcast the result
   char p[256];
   if(send_extended) {
     // extended access point scan information
-    sprintf(p, "{\"scan\":{\"ssid\":\"%s\", \"bssid\":\"%s\", \"encrypt\":\"%s\", \"channel\":%d, \"rssi\":%d, \"ap\":%s, \"ota\":%s, \"auto\":%s, \"priority\":%d, \"fx\":\"%s\" }}\n", 
+    sprintf(p, "{\"scan\":{\"ssid\":\"%s\", \"bssid\":\"%s\", \"encrypt\":\"%s\", \"channel\":%d, \"rssi\":%d, \"ap\":%s, \"ota\":%s, \"auto\":%s, \"priority\":%d, \"fx\":\"%s\", \"color\":\"%s\" }}\n", 
       json_name, // WiFi.SSID(i).c_str(), 
       WiFi.BSSIDstr(index).c_str(), 
       encrypt_str,
       WiFi.channel(index), 
-      WiFi.RSSI(index),
+      rssi,
       is_ap ? "true" : "false",
       x_ota ? "true" : "false",
       x_auto ? "true" : "false",
       x_priority,
-      x_fx.c_str()
+      x_fx.c_str(),
+      x_color.c_str()
     );
   } else {
     // basic access point scan information
@@ -321,7 +351,7 @@ void scan_report_event(int index) {
       WiFi.BSSIDstr(index).c_str(), 
       encrypt_str,
       WiFi.channel(index), 
-      WiFi.RSSI(index),
+      rssi,
       is_ap ? "true" : "false"
     );
   }
@@ -357,13 +387,43 @@ void scan_report_event(int index) {
       memcpy(search_bssid, bssid, 6);
     }
   }
+  // apply other special effects properties
+  // does the special effect require it?
+  if(!(x_fx == "ignore")) ap_count++;
+  if(x_fx == "happy") ap_happy++;
+  if(x_fx == "angry") ap_angry++;
 }
 
 
 // compose and send a scan complete message
-void scan_complete_event() {
-  char p[128];
+void scan_report_complete() {
+  // adopt a new pose based on the scan result
+  if(ap_angry>0) {
+    fx_pose("angry");
+  } else if(ap_happy>0) {
+    fx_pose("happy");
+  } else if(ap_count>0) {
+    // start with the generic detection pose
+    fx_pose("detect");
+    // check for tracking target
+    if(scan_tracking_index != -1) { 
+      // transition to the tracking color
+      if(scan_tracking_color) led_animate(0, scan_tracking_color, 50);
+    }
+  } else {
+    fx_pose("idle");
+  }
+  // check for tracking target
+  if(scan_tracking_index != -1) { 
+    // continue to pulse the LED brightness
+    pulse_velocity = 32+(100+scan_tracking_rssi);
+    pulse_loop = true;
+  } else {
+    // after the current pulse ends, don't loop
+    pulse_loop = false;
+  }
   // let people know what the best pick for ap would be
+  char p[128];
   if(search_index >=0) {
     // do an expanded search for the AP password
     String password = wifi_lookup_password(WiFi.SSID(search_index), WiFi.BSSIDstr(search_index), true);
@@ -391,9 +451,11 @@ void scan_complete_event() {
   events.send(p, "scan");
   // if we are logging, send a storage update
   if(logging_state == LOGGING_STATE_ACTIVE) logging_storage();
-  // decay entries from the skip list
+  // decay entries from the skip list - the AP's we ignore for a while because we couldn't connect. they might let us now?
   skip_list_decrement();
+  //  all done
 }
+
 void wifi_event(WiFiEvent_t event) {
   static int i=0;
   switch(event) {
@@ -508,7 +570,8 @@ void wifi_reconnect() {
     if (WiFi.waitForConnectResult() == WL_CONNECTED) {
       wifi_state = WIFI_STATE_CONNECTED;
       // supergreen
-      leds[0] = CRGB::Green; FastLED.show();
+      // leds[0] = CRGB::Green; FastLED.show();
+      fx_pose("online");
       // optionally enable over-the-air programming updates, if allowed
       if(apconnect_has_ota) { 
         ota_state_change = OTA_STATE_START;
@@ -519,7 +582,8 @@ void wifi_reconnect() {
       events.send("{\"wifi\":{\"error\":\"connect failed\"}}" );
       wifi_state = WIFI_STATE_OFF;
       // fail
-      leds[0] = CRGB::Purple; FastLED.show();
+      // leds[0] = CRGB::Purple; FastLED.show();
+      fx_pose("offline");
       // add the bssid to the skip list for a while
       skip_list_add(apconnect_bssid);
     }
@@ -548,6 +612,7 @@ void wifi_setup(){
   WiFi.hostname(local_hostname);
 
   // start local access point
+  WiFi.setOutputPower(ap_txpower);
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid.c_str(),ap_password.c_str());
 
@@ -580,8 +645,14 @@ int ota_last_progress = -1;
 
 void ota_setup(){
   // echo OTA events to the websocket clients
-  ArduinoOTA.onStart([]() { events.send("{\"ota\":{\"state\":\"start\"}}", "ota"); });
-  ArduinoOTA.onEnd([]() { events.send("{\"ota\":{\"state\":\"end\"}}", "ota"); });
+  ArduinoOTA.onStart([]() { 
+    fx_pose("ota");
+    events.send("{\"ota\":{\"state\":\"start\"}}", "ota"); 
+  });
+  ArduinoOTA.onEnd([]() { 
+    // fx_pose("shutdown");
+    events.send("{\"ota\":{\"state\":\"end\"}}", "ota"); 
+  });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     int pc = (float)progress / (float)total * 100.0;
     if(ota_last_progress != pc) {
@@ -654,7 +725,8 @@ void wifi_loop(){
         case WIFI_STATE_CONNECTED:
         case WIFI_STATE_IDLE:
           // I'm not blue
-          leds[0] = CRGB::Orange; FastLED.show();
+          // leds[0] = CRGB::Orange; FastLED.show();
+          fx_pose(String("offline"));
           // disconnect, then fall through
           WiFi.disconnect(false);
           delay(1000);
@@ -674,7 +746,8 @@ void wifi_loop(){
         case WIFI_STATE_CONNECTED:
         case WIFI_STATE_IDLE:
           // I'm not blue
-          leds[0] = CRGB::Orange; FastLED.show();
+          // leds[0] = CRGB::Orange; FastLED.show();
+          fx_pose(String("offline"));
           // disconnect
           WiFi.disconnect(false);
           delay(1000);
@@ -696,6 +769,7 @@ void wifi_loop(){
       }
       break;
     case WIFI_STATE_STOP:
+      fx_pose("offline");
       WiFi.disconnect(false);
       delay(1000);
       wifi_state = WIFI_STATE_OFF;
@@ -747,13 +821,10 @@ void wifi_loop(){
     case SCAN_STATE_OFF: // not scanning
       break;
     case SCAN_STATE_START: // begin async scan for all networks
+      // 
       scan_start_event();
-      // leds[0] = CRGB::Yellow; FastLED.show();
       WiFi.scanNetworks(true, true);
       scan_state = SCAN_STATE_ACTIVE;
-      // open the eye during the scan
-      //servo_move(0,90,24);
-      //servo_move(1,90,24);
       break;
     case SCAN_STATE_ACTIVE: // async scanning, check for results
       r = WiFi.scanComplete();
@@ -763,29 +834,14 @@ void wifi_loop(){
         case WIFI_SCAN_FAILED: 
           // scan error?
           scan_state = SCAN_STATE_STOP;
-          leds[0] = CRGB::Red; FastLED.show();
+          // leds[0] = CRGB::Red; FastLED.show();
           break;
         default:
           // scan complete, count returned
           scan_count = r;
-          leds[0] = CRGB::Green; FastLED.show();
+          // leds[0] = CRGB::Green; FastLED.show();
           // scan is complete
           async_wifi_scan_complete();
-          // is the servo system running?
-          /*
-          if(servos_state==SERVO_STATE_ACTIVE) {
-            // use the scan count to compute a servo angle
-            int pos = scan_count - 1; 
-            if(pos<0) { pos=0; } 
-            if(pos>9) { pos=6; } 
-            pos = pos * 20;
-            // update the servo values
-            servo_move(0,pos,8);
-            servo_move(1,pos,8);
-          }
-          */
-          // do report lines after combining with files.
-          scan_report_index = 0;
           scan_state = SCAN_STATE_REPORT;
       }
       break;
@@ -796,7 +852,7 @@ void wifi_loop(){
         scan_report_event(scan_report_index++);
       } else {
         // finish, then go idle
-        scan_complete_event();
+        scan_report_complete();
         scan_state = SCAN_STATE_IDLE;
       }
       break;

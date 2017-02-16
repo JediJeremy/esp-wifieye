@@ -32,13 +32,13 @@ void server_setup() {
   
   server.on("/servo/start", HTTP_GET, [](AsyncWebServerRequest *request){
     // make sure the servo system is running
-    servos_state_change = SERVO_STATE_START;
+    servos_state_change = SERVO_STATE_AUTO;
     request->send(200, "text/plain", "ok" );
   });
   
   server.on("/servo/stop", HTTP_GET, [](AsyncWebServerRequest *request){
     // make sure the servo system is running
-    servos_state_change = SERVO_STATE_STOP;
+    servos_state_change = SERVO_STATE_OFF;
     request->send(200, "text/plain", "ok" );
   });
   
@@ -275,11 +275,16 @@ void server_setup() {
     WiFi.macAddress(mac);
     response->printf("\t\t\"local_mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\"\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     response->print("\t},\n");
-    //
+    // scan state
     response->print("\t\"scan\":{\n");
     response->printf("\t\t\"state\":\"%s\"\n", scan_state_name(scan_state) );
     response->print("\t},\n");
+    // FX settings
+    response->print("\t\"fx\":{\n");
+    response->printf("\t\t\"servo_start\":\"%s\"\n", fx_servo_start.c_str() );
+    response->print("\t},\n");
     // servo state list
+    response->printf("\t\"servos_state\":\"%s\",\n", servo_state_string(servos_state).c_str() );
     response->print("\t\"servos\":[\n");
     for(int i=0; i<SERVO_COUNT; i++) {
       response->print("\t\t{");
@@ -336,6 +341,10 @@ void server_setup() {
     response->print("\t\"wifi_password\":");
     response->print(ap_password =="" ? "false" : "true");
     response->print(",\n");
+    // wifi tx power
+    response->print("\t\"wifi_txpower\":");
+    response->print(ap_txpower);
+    response->print(",\n");
     // htaccess name
     response->print("\t\"htaccess_username\":\"");
     response->print(htaccess_username);
@@ -343,7 +352,24 @@ void server_setup() {
     // htaccess password exists
     response->print("\t\"htaccess_password\":");
     response->print(htaccess_password == "" ? "false" : "true");
-    response->print("\n");
+    response->print(",\n");
+    // servo config list
+    response->print("\t\"servo\":{\n");
+    for(int i=0; i<SERVO_COUNT; i++) {
+      response->printf("\t\t\"%d\":{",i+1);
+      response->printf("\"pin\":%d,",servo_config[i].pin);
+      response->printf("\"min_micros\":%d,",servo_config[i].min_micros);
+      response->printf("\"max_micros\":%d,",servo_config[i].max_micros);
+      response->printf("\"zero_micros\":%d,",servo_config[i].zero_micros);
+      response->print("\"unit_scaling\":");
+      response->print(servo_config[i].unit_scaling);
+      if((i+1) < SERVO_COUNT) {
+        response->print("},\n");
+      } else {
+        response->print("}\n");
+      }
+    }
+    response->print("\t}\n");
     // end block with an OK code
     response->print("}},\"ok\":true}");
     // send the response

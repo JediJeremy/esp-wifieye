@@ -1,5 +1,5 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href=/apple-touch-icon.png rel=apple-touch-icon> <link href=/favicon.ico rel=icon>
@@ -14,13 +14,10 @@
 <script type="text/javascript">
 	// websocket interface to server 
     var ws = null;
+	// utility methods
     function ge(s){ return document.getElementById(s);}
     function ce(s){ return document.createElement(s);}
     function stb(outer,inner){
-    	// outer = outer || $("#messages-scroll");
-    	// inner = inner || $("#messages-list");
-    	// outer.scrollTo( inner.height() );
-    	// $("#messages-input").get(0).scrollIntoView();
     	$("#messages-scroll").scrollTop( 100000 ); // scroll as much as possible
     }
 	function update_progress_bar(id, p, t) {
@@ -178,6 +175,9 @@
         		$("#local-ip").text(status.wifi.local_ip);        		
         	}
         }
+        if(status.color) {        	
+        	$("#section-eye .well").css("background-color",status.color);
+        }
 	}
 	
 	function wifi_event(message) {
@@ -220,6 +220,7 @@
 		$('#ap-dialog-auto').prop('checked',!!ap.auto);		
 		$('#ap-dialog-ota').prop('checked',!!ap.ota);		
 		$('#ap-dialog-fx').val(ap.fx);
+		$('#ap-dialog-color').val(ap.color);
 		$('#ap-dialog-priority').val(ap.priority || 0);
 		$('#ap-dialog-priority-text').text(ap.priority || '0');
 		// show the dialog
@@ -291,14 +292,13 @@
 	function scan_state(message) {
    		$('#scan-mode').val(scan_state_option[message.state]);
 	}
-
-	var servo_state_option = {
-		'started' : 'manual',
-		'stopped' : 'stop',
-	};
+	
+	function fx_state(message) {
+		$('#fx-servo-start').val(message.servo_start);
+	}
 
 	function servo_state(message) {
-   		$('#servo-mode').val(servo_state_option[message.state]);
+   		$('#servo-mode').val(message.state);
 	}
 	
 	var logging_state_option = {
@@ -348,25 +348,33 @@
 	
 	function config_dialog() {
 		// disable all the primary buttons
-		$('#config-dialog .btn-primary').attr('disabled',true);
+		$('#cd .btn-primary').attr('disabled',true);
 		// show the dialog
-		$('#config-dialog').modal({show:true});
+		$('#cd').modal({show:true});
         // get the system status again
         $.ajax({
         	url: 'system/config',
         	error: function(jqXHR, textStatus) {
-				$('#config-dialog').modal({show:false});
+				$('#cd').modal({show:false});
         		console.error(textStatus);
         	},
         	success: function(m) {
         		// copy all the values
-        		$('#config-dialog-hostname').val(m.system.config.host_name);
-        		$('#config-dialog-wifiname').val(m.system.config.wifi_name);
-        		$('#config-dialog-wifipassword').val(m.system.config.wifi_password ? '********':'');
-        		$('#config-dialog-htname').val(m.system.config.htaccess_username);
-        		$('#config-dialog-htpassword').val(m.system.config.htaccess_password ? '********':'');
+        		$('#cd-hostname').val(m.system.config.host_name);
+        		$('#cd-wifiname').val(m.system.config.wifi_name);
+        		$('#cd-txpower').val(m.system.config.wifi_txpower);
+        		$('#cd-txpower-label').text(""+parseFloat(m.system.config.wifi_txpower||0).toFixed(1));
+        		$('#cd-wifipassword').val(m.system.config.wifi_password ? '********':'');
+        		$('#cd-htname').val(m.system.config.htaccess_username);
+        		$('#cd-htpassword').val(m.system.config.htaccess_password ? '********':'');
+        		// servo blocks
+	        	for(var index=1; index<=2; index++) {
+		        	for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
+		        		$('#cds'+index+'-'+n).val( m.system.config.servo[index][n] )
+		        	}
+        		}
         		// enable all the buttons
-				$('#config-dialog .btn-primary').attr('disabled',false);
+				$('#cd .btn-primary').attr('disabled',false);
         	}
         })
 	}
@@ -378,6 +386,8 @@
 			scan_state(status.scan);
 			logging_state(status.log);
 			logging_storage(status);
+			fx_state(status.fx);
+			if(status.servos_state) $('#servo-mode').val(status.servos_state);
 		}
 	}
 
@@ -407,6 +417,18 @@
        	m.wifi.auto = $('#ap-dialog-auto').is(':checked');
        	m.wifi.ota = $('#ap-dialog-ota').is(':checked');
        	m.wifi.fx = $('#ap-dialog-fx').val();
+       	m.wifi.color = $('#ap-dialog-color').val();
+       	// find the entry in the scan list and also update the data there
+       	for(var i in scan_list) {
+       		var e =scan_list[i];
+       		if(e.bssid == m.wifi.bssid) {
+       			// found it. copy properties
+       			for( n in { priority:0, auto:0, ota:0, fx:0, color:0, password:0 } ) {
+       				if(m.wifi[n]) e[n] = m.wifi[n];
+       			}
+       			break;
+       		}
+       	}
        	console.log(JSON.stringify(m));
 		ws.send(JSON.stringify(m));	
 	}
@@ -489,30 +511,63 @@
         $('#action-configuration').on('click', config_dialog);
  		$('#action-config-host-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
-				"hostname":$('#config-dialog-hostname').val()
+				"hostname":$('#cd-hostname').val()
 			}}));
         });
         $('#action-config-wifi-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				'ap':{
-					"ssid":$('#config-dialog-wifiname').val(),
-					"password":dialog_password('#config-dialog-wifipassword')
+					"ssid":$('#cd-wifiname').val(),
+					"password":dialog_password('#cd-wifipassword'),
+					"txpower":parseFloat($('#cd-txpower').val())
 				}
 			}}));
         });
+        $('#cd-txpower').on('change input', function(e,v) {
+			var v = $(e.target).val();
+			$('#cd-txpower-label').text(""+parseFloat(v||0).toFixed(1));
+		});
         $('#action-config-htaccess-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				'htaccess':{
-					"username":$('#config-dialog-htname').val(),
-					"password":$('#config-dialog-htpassword').val()
+					"username":$('#cd-htname').val(),
+					"password":$('#cd-htpassword').val()
 				}
 			}}));
         });  
+        $('#action-config-fx-save').on('click', function() {
+			ws.send(JSON.stringify({"config":{
+				'fx':{
+					"servo_start":$('#fx-servo-start').val()
+				}
+			}}));
+        });
         $('#action-wifi-reconnect').on('click', function() {
 			ws.send(JSON.stringify({"wifi":{
 				'mode':'reconnect'
 			}}));
-        });  
+        });
+        $('body').on('click', '.action-pose', function() {
+        	var name = $(this).text();
+        	ws.send(JSON.stringify({"fx":{
+        		'pose':name
+        	}}));
+        });
+        // servo config
+        for(var index=1; index<=2; index++) (function(index) {
+        	// 
+	        $('#action-config-servo'+index+'-save').on('click', function() {
+	        	// build a servo config message
+	        	var m = {"config":{"servo":{}}};
+	        	var ms = m.config.servo[index] = {};
+	        	// from the form values
+	        	for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
+	        		ms[n] = $('#cds'+index+'-'+n).val()
+	        	}
+				ws.send(JSON.stringify(m));
+	        });  
+        })(index);
+        
 		// request the current ui status and then update
 		$.ajax({
         	url: 'ui/status',
@@ -526,13 +581,14 @@
 	.ui-section {  }
 	.ui-section > .well { overflow-y:scroll; height:100%; margin:0; }
 	.ui-section > .well > .row { margin-left:0; margin-right:0; }
+	#section-eye { position:absolute; left:47%; right:47%; top:46%; bottom:46%; }
 	#section-scan { position:absolute; left:5%; right:5%; top:3%; height:35%; }
 	#section-servo { position:absolute; left:5%; right:55%; top:40%; height:30%; }
 	#section-status { position:absolute; left:55%; right:5%; top:40%; height:30%; }
 	#section-console { position:absolute; left:5%; right:5%; bottom:3%; height:25%; }
 	#section-console .list-group { font-size:10px; }
 	#section-console .list-group-item { font-size:10px; padding:1px; 6px; }
-	
+	#section-eye .well { height:100%; }
 	#scan-table { width:100%; padding:2px; background-color:#444; }
 	.scan-row { color:#fff; }
 	.scan-row-ap { color:#ffc; }
@@ -557,47 +613,171 @@
 </head>
 <body>
 <!-- system config dialog -->
-<div id="config-dialog" class="modal fade" tabindex="-1" role="dialog">
+<div id="cd" class="modal fade" tabindex="-1" role="dialog">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <div class="modal-header">
         <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
         <h4 class="modal-title">Configuration</h4>
       </div>
-      <div class="modal-body form-horizontal">
-		  <input type="hidden" id="ap-dialog-ssid" />
-		  <div class="form-group form-group-sm">
-		    <div class="col-xs-8"><h4>System</h4></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-md-2"><label for="config-dialog-hostname">hostname</label></div>
-		    <div class="col-md-8"><input id="config-dialog-hostname" class="form-control" /></div>
-	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-host-save">Save</button></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-xs-8"><h4>WiFi Access Point</h4></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-md-2"><label for="config-dialog-wifiname">name</label></div>
-		    <div class="col-md-8"><input id="config-dialog-wifiname" class="form-control"/></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-md-2"><label for="config-dialog-wifipassword">password</label></div>
-		    <div class="col-md-8"><input id="config-dialog-wifipassword" class="form-control" value="********" /></div>
-	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-wifi-save">Save</button></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-xs-8"><h4>HTTP Authorization</h4></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-md-2"><label for="config-dialog-htname">name</label></div>
-		    <div class="col-md-8"><input id="config-dialog-htname" class="form-control"/></div>
-		  </div>
-		  <div class="form-group form-group-sm">
-		    <div class="col-md-2"><label for="config-dialog-htpassword">password</label></div>
-		    <div class="col-md-8"><input id="config-dialog-htpassword" class="form-control" value="********" /></div>
-	        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-htaccess-save">Save</button></div>
-		  </div>		 	
+	<!-- Collapsible sections 
+    <div id="accordion" role="tablist" aria-multiselectable="false">-->
+    <div class="container-fluid">
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs1"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc1" aria-expanded="true" aria-controls="cdc1">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Local Host
+	    	</a></h4></div>
+	    	<div id="cdc1" class="collapse" role="tabpanel" aria-labelledby="cs1"><div class="card-block">
+               <div class="modal-body form-horizontal">
+				  <p class="help-block">Host information used by OTA to identify devices.</p>
+				  <input type="hidden" id="ap-dialog-ssid" />
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-hostname">hostname</label></div>
+				    <div class="col-md-8"><input id="cd-hostname" class="form-control" /></div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-host-save">Save</button></div>
+				  </div>
+               </div>
+	   		</div></div>
+		</div>
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs2"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc2" aria-expanded="true" aria-controls="cdc2">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> WiFi Access Point
+	    	</a></h4></div>
+	    	<div id="cdc2" class="collapse" role="tabpanel" aria-labelledby="cs2"><div class="card-block">
+               <div class="modal-body form-horizontal">
+				  <p class="help-block">Settings for the WiFi Access Point this device broadcasts.</p>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-wifiname">name</label></div>
+				    <div class="col-md-8"><input id="cd-wifiname" class="form-control"/></div>
+				  </div>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-wifipassword">password</label></div>
+				    <div class="col-md-8"><input id="cd-wifipassword" class="form-control" value="********" /></div>
+				  </div>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-wifiname">TX power</label></div>
+				    <div class="col-md-6"><input id="cd-txpower" type="range" min="0" max="20.5" step="0.5" value="0" /></div>
+				    <div class="col-md-2 text-right"><label>+<span id="cd-txpower-label">0.0</span> dB</div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-wifi-save">Save</button></div>
+				  </div>
+               </div>
+	   		</div></div>
+		</div>
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs3"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc3" aria-expanded="true" aria-controls="cdc3">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> HTTP Authorization
+	    	</a></h4></div>
+	    	<div id="cdc3" class="collapse" role="tabpanel" aria-labelledby="cs3"><div class="card-block">
+               <div class="modal-body form-horizontal">
+				  <p class="help-block">Web Authentication credentials. (Only applies to the <a href="/edit" target="_blank">File Editor</a> and is obviously not very secure. Demo only.)</p>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-htname">name</label></div>
+				    <div class="col-md-8"><input id="cd-htname" class="form-control"/></div>
+				  </div>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cd-htpassword">password</label></div>
+				    <div class="col-md-8"><input id="cd-htpassword" class="form-control" value="********" /></div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-htaccess-save">Save</button></div>
+				  </div>
+               </div>
+	   		</div></div>
+		</div>
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs6"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc6" aria-expanded="true" aria-controls="cdc6">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> FX
+	    	</a></h4></div>
+	    	<div id="cdc6" class="collapse" role="tabpanel" aria-labelledby="cs6"><div class="card-block">
+               <div class="modal-body form-horizontal">
+				  <p class="help-block">Settings for the servo/lighting special effects.</p>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="fx-servo-start">Servo Startup</label></div>
+				    <div class="col-md-4" ><select id="fx-servo-start" class="form-control input-sm">
+					  <option value="off">off</option>
+					  <option value="on">on</option>
+					  <option value="auto">auto</option>
+					</select></div>
+			        <div class="col-md-4">&nbsp;</div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-fx-save">Save</button></div>
+				</div>
+               </div>
+	   		</div></div>
+		</div>
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs4"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc4" aria-expanded="true" aria-controls="cdc4">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 1
+	    	</a></h4></div>
+	    	<div id="cdc4" class="collapse" role="tabpanel" aria-labelledby="cs4"><div class="card-block">
+              <div class="modal-body form-horizontal">
+				<p class="help-block">Hardware setup for the first servo motor.</p>
+                <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds1-min_micros">min</label></div>
+				    <div class="col-md-4"><input id="cds1-min_micros" class="form-control"/></div>
+				    <div class="col-md-2"><label for="cds1-max_micros">max</label></div>
+				    <div class="col-md-4"><input id="cds1-max_micros" class="form-control"/></div>
+			    </div>
+				<div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds1-zero_micros">zero</label></div>
+				    <div class="col-md-4"><input id="cds1-zero_micros" class="form-control"/></div>
+				    <div class="col-md-2"><label for="cds1-unit_scaling">scale</label></div>
+				    <div class="col-md-4"><input id="cds1-unit_scaling" class="form-control"/></div>
+				</div>
+				<div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds1-pin">pin</label></div>
+				    <!-- <div class="col-md-4"><input id="cds1-pin" class="form-control"/></div> -->
+				    <div class="col-md-4" ><select id="cds1-pin" class="form-control input-sm">
+					  <option value="0">none</option>
+					  <option value="1">Pin 1</option>
+					  <option value="3">Pin 3</option>
+					  <option value="4">Pin 4</option>
+					  <option value="5">Pin 5</option>
+					  <option value="12">Pin 12</option>
+					  <option value="13">Pin 13</option>
+					  <option value="14">Pin 14</option>
+					</select></div>
+			        <div class="col-md-4">&nbsp;</div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo1-save">Save</button></div>
+				</div>
+              </div>
+	   		</div></div>
+		</div>
+    	<div class="card card-block">
+    		<div class="card-header" role="tab" id="cs5"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc5" aria-expanded="true" aria-controls="cdc5">
+	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 2
+	    	</a></h4></div>
+	    	<div id="cdc5" class="collapse" role="tabpanel" aria-labelledby="cs5"><div class="card-block">
+               <div class="modal-body form-horizontal">
+				 <p class="help-block">Hardware setup for the second servo motor.</p>
+                 <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds2-min_micros">min</label></div>
+				    <div class="col-md-4"><input id="cds2-min_micros" class="form-control"/></div>
+				    <div class="col-md-2"><label for="cds2-max_micros">max</label></div>
+				    <div class="col-md-4"><input id="cds2-max_micros" class="form-control"/></div>
+				  </div>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds2-zero_micros">zero</label></div>
+				    <div class="col-md-4"><input id="cds2-zero_micros" class="form-control"/></div>
+				    <div class="col-md-2"><label for="cds2-unit_scaling">scale</label></div>
+				    <div class="col-md-4"><input id="cds2-unit_scaling" class="form-control"/></div>
+				  </div>
+				  <div class="form-group form-group-sm">
+				    <div class="col-md-2"><label for="cds2-pin">pin</label></div>
+				    <!--  <div class="col-md-4"><input id="cds2-pin" class="form-control"/></div> -->
+				    <div class="col-md-4" ><select id="cds2-pin" class="form-control input-sm">
+					  <option value="0">none</option>
+					  <option value="1">Pin 1</option>
+					  <option value="3">Pin 3</option>
+					  <option value="4">Pin 4</option>
+					  <option value="5">Pin 5</option>
+					  <option value="12">Pin 12</option>
+					  <option value="13">Pin 13</option>
+					  <option value="14">Pin 14</option>
+					</select></div>
+			        <div class="col-md-4">&nbsp;</div>
+			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo2-save">Save</button></div>
+				  </div>
+               </div>
+	   		</div></div>
+		</div>	
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
@@ -615,29 +795,10 @@
       </div>
       <div class="modal-body form-horizontal">
 		  <input type="hidden" id="ap-dialog-ssid" />
-		  <!--  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-ssid">SSID</label></div>
-		    <div class="col-xs-10" id="ap-dialog-ssid"></div>
-		  </div>  -->
-		  <!--
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-bssid">Password</label></div>
-		    <div class="col-xs-10"><input id="ap-dialog-password" class="form-control" value="********" /></div>
-		  </div>
-		  <div class="form-group">
-		    <div class="col-xs-4"></div>
-		    <div class="col-xs-4"><button id="action-ap-connect" class="btn btn-default btn-block" type="submit">Connect</button></div>
-		    <div class="col-xs-4"><button id="action-ap-savepass" class="btn btn-default btn-block" type="submit">Save</button></div>
-		  </div>
-		  -->
 		  <div class="form-group">
 		    <div class="col-xs-2"><label for="ap-dialog-bssid">BSSID</label></div>
 		    <div class="col-xs-10" id="ap-dialog-bssid"></div>
 		  </div>
-		  <!--<div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-encrypt">Encryption</label></div>
-		    <div class="col-xs-10" id="ap-dialog-encrypt"></div>
-		  </div>-->
 		  <div class="form-group">
 		    <div class="col-xs-2"><label for="ap-dialog-password">Password</label></div>
 		    <div class="col-xs-8"><input id="ap-dialog-password" class="form-control" value="********" /></div>
@@ -653,20 +814,21 @@
 		    	<label><input  id="ap-dialog-auto" type="checkbox">&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>&nbsp;Auto&nbsp;Connect</label><br/>
 		    	<label><input  id="ap-dialog-ota" type="checkbox">&nbsp;<span class="glyphicon glyphicon-cog" aria-hidden="true"></span>&nbsp;OTA&nbsp;Updates</label><br/>
 		    </div>
-		    
-		    
 		  </div>
 		  <div class="form-group">
 		    <div class="col-xs-2"><label for="ap-dialog-fx">FX</label></div>
 		    <div class="col-xs-8" ><select id="ap-dialog-fx" class="form-control input-sm">
 			  <option value="none">none</option>
-			  <option value="pulse">pulse</option>
+			  <option value="ignore">ignore</option>
 			  <option value="track">track</option>
 			  <option value="happy">happy</option>
 			  <option value="angry">angry</option>
 			</select></div>
-		  </div>
-		 	
+		  </div> 	
+		  <div class="form-group">
+		    <div class="col-xs-2"><label for="ap-dialog-color">Color</label></div>
+		    <div class="col-xs-8"><input id="ap-dialog-color" class="form-control" type="color" value="#000000" /></div>
+	      </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" id="action-ap-connect" data-dismiss="modal">Connect</button>
@@ -734,6 +896,7 @@
 </div>
 <!-- main ui form -->
 <div class="container">
+	<div id="section-eye"><div class="well well-sm" style="background:#222;" ></div></div>
 	<div id="section-scan" class="ui-section"><div class="well well-sm" style="overflow-y:scroll; background:#222;" >
   		<div id="scan-list" class="container-fluid"></div>
   		<div id="scan-status"></div>
@@ -748,14 +911,14 @@
 		  		<td width="30%" class="text-center">Speed</td>
 		  	</tr><tr>
 			  	<td>1:</td>
-			  	<td width="60%"><input id="servo.1" type="range" min="0" max="180" /></td>
+			  	<td width="60%"><input id="servo.1" type="range" min="-90" max="90" value="0" /></td>
 			  	<td>&nbsp;</td>
-		  		<td width="30%"><input id="servo.speed.1" type="range" min="1" max="200" value="20" /></td>
+		  		<td width="30%"><input id="servo.speed.1" type="range" min="1" max="300" value="30" /></td>
 		  	</tr><tr>
 			  	<td>2:</td>
-		  		<td width="60%"><input id="servo.2" type="range" min="0" max="180" /></td>
+		  		<td width="60%"><input id="servo.2" type="range" min="-90" max="90" value="0" /></td>
 			  	<td>&nbsp;</td>
-		  		<td width="30%"><input id="servo.speed.2" type="range" min="1" max="200" value="20" /></td>
+		  		<td width="30%"><input id="servo.speed.2" type="range" min="1" max="300" value="30" /></td>
 		  	</tr>
 		  </tbody></table>
 		</div>
@@ -763,18 +926,19 @@
 			<br/>
 		</div>
 		<div class="row">
-			<div class="col-md-3"><label>Servos</label></div>
-			<div class="col-md-4"><select id="servo-mode" class="form-control input-sm">
-			  <option value="stop">off</option>
-			  <option value="manual">manual</option>
-			</select></div>
+			<div class="col-xs-3 text-right"><label>Pose</label></div>
+			<div  class="col-xs-8">
+				<button class="action-pose btn btn-default btn-sm" type="button">startup</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">ready</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">online</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">offline</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">scan</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">angry</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">happy</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">detect</button>
+				<button class="action-pose btn btn-default btn-sm" type="button">idle</button>
+			</div>
 		</div>
-	<!-- 
-	  Scan Color:<br/>
-	  <input id="scan.r" type="range" min="0" max="255"  style="width:30%"/><br/>
-	  <input id="scan.g" type="range" min="0" max="255"  style="width:30%"/><br/>
-	  <input id="scan.b" type="range" min="0" max="255"  style="width:30%"/><br/>
-	   -->
 	</div></div>
 	<div id="section-status" class="ui-section"><div class="well well-sm container-fluid" style="background-color:#ccc;">
 		<div class="row">
@@ -821,26 +985,34 @@
 			</div>
 		</div>
 		<div class="row">
-			<div class="col-md-3"><label>Log</label></div>
+			<div class="col-md-3"><label><a target="_blank" href="log.txt">Logs</a></label></div>
 			<div class="col-md-4"><select id="logging-mode" class="form-control input-sm">
 			  <option value="stop">off</option>
 			  <option value="start">active</option>
 			</select></div>
 			<div  class="col-md-4">			
 				<button class="btn btn-default btn-sm btn-block" type="button" data-toggle="modal" data-target="#clearlog-dialog">Clear Logs</button>
-				<br/>
 			</div>
 		</div>
 		<div class="row">
-			<div class="col-xs-3 text-right"><label></label></div>
-			<div  class="col-xs-8">
-				<button id="action-configuration"  class="btn btn-default btn-sm btn-block" type="button">Config</button>		
+			<div class="col-md-3"><label>Servos</label></div>
+			<div class="col-md-4"><select id="servo-mode" class="form-control input-sm">
+			  <option value="off">off</option>
+			  <option value="on">on</option>
+			  <option value="auto">auto</option>
+			</select></div>
+		</div>
+		<br/>
+		<div class="row">
+			<div class="col-md-3"><label>System</label></div>
+			<div  class="col-md-8">
+				<button id="action-configuration"  class="btn btn-default btn-sm btn-block" type="button">Configuration</button>		
 			</div>
 		</div>
+		<br/>
 		<div class="row">
-			<div class="col-xs-3 text-right"><label>Status</label></div>
-			<div  class="col-xs-8">
-				<a class="btn btn-default btn-sm" target="_blank" href="log.txt">Log</a>
+			<div class="col-md-3"><label>Status</label></div>
+			<div  class="col-md-8">
 				<button id="action-system-status" class="btn btn-default btn-sm" type="button">System</button>
 				<button id="action-wifi-status" class="btn btn-default btn-sm" type="button">WiFi</button>
 				<button id="action-servo-status" class="btn btn-default btn-sm" type="button">Servo</button>
@@ -874,6 +1046,7 @@
 			    "status": {
 			   	  "vcc":3140,
 			   	  "rssi":-54,
+			   	  "color":"#FFFF00",
 			      "wifi": {
 			        "state": "started",
 			        "hostname": "Agomotto",
@@ -886,6 +1059,10 @@
 			      "scan": {
 			        "state": "stopped"
 			      },
+			      "fx": {
+			        "servo_start": "auto"
+			      },
+			      "servos_state": "auto",
 			      "servos": [
 			        {
 			          "state": 0,

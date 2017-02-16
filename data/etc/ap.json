@@ -1,5 +1,6 @@
 {
-	"ssid":"Agomotto",
+	"ssid":"WiFi Eye",
 	"password":"shamballa",
+	"tx_power":6.0,
 	"channel":"auto"
 }
