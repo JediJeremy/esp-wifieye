@@ -3,5 +3,6 @@
 	"priority":0,
 	"auto":false,
 	"ota":false,
-	"fx":"angry"
+	"fx":"track",
+	"color":"#FF4020"
 }

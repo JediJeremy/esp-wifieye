@@ -563,6 +563,7 @@ void fx_pose(String name, boolean do_servos = false) {
             // led_animate(index, col, r);
             rgb_animate(&color_pose[index], col, rate);
             // report new color
+            /*
             if(index==0){
               if(strlen(led_c)<64) { // sanity check
                 char p[128];
@@ -570,6 +571,7 @@ void fx_pose(String name, boolean do_servos = false) {
                 events.send(p,"status");
               }
             }
+            */
           }
         }
       }
@@ -596,13 +598,14 @@ void fx_pose(String name, boolean do_servos = false) {
             if(servon.containsKey("tw")) {
               servo_pose_tremble[index] = (float)servon["tw"]; // tremble in degrees
             }
-            
-            //
+            /*
+            // report new servo position
             char p[64];
              sprintf(p, "{\"servo\":{\"i\":%d, \"p\":%d, \"v\":%d }}", 
              index, int(move_p), int(move_v)
             );
             events.send(p);
+            */
           }
         }
       }

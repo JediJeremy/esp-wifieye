@@ -12,172 +12,176 @@
 <script src="js/bootstrap-3.3.7.min.js"></script>
 
 <script type="text/javascript">
+	// configuration globals
+	LED_COUNT = 1;
+	SERVO_COUNT = 2;
+
 	// websocket interface to server 
-    var ws = null;
+	var ws = null;
 	// utility methods
-    function ge(s){ return document.getElementById(s);}
-    function ce(s){ return document.createElement(s);}
-    function stb(outer,inner){
-    	$("#messages-scroll").scrollTop( 100000 ); // scroll as much as possible
-    }
-	function update_progress_bar(id, p, t) {
-   		if(typeof(p)==='number') {
-    		$(id).css({ width:''+p+'%', 'aria-valuenow':p }).text(t || ''+p+'%');
-      	}
+	function ge(s){ return document.getElementById(s);}
+	function ce(s){ return document.createElement(s);}
+	function stb(outer,inner){
+		$("#messages-scroll").scrollTop( 100000 ); // scroll as much as possible
 	}
-    function sendBlob(str){
-      var buf = new Uint8Array(str.length);
-      for (var i = 0; i < str.length; ++i) buf[i] = str.charCodeAt(i);
-      ws.send(buf);
-    }
-    function addMessage(m,style){
-      var msg = $('<li class="list-group-item">'); 
-      msg.text(m); // set message text
-      msg.attr('time', +(new Date) ); // set current time
-      msg.addClass( style ); // add styles
-      $("#messages-list").append(msg);
-      // msg.innerText = m;
-      // ge("messages").appendChild(msg);
-      stb();
-    }
-    function startSocket(){
-      ws = new WebSocket('ws://'+document.location.host+'/ws',['arduino']);
-      ws.binaryType = "arraybuffer";
-      ws.onopen = function(e){
-        addMessage("Connected",'text-success');
-      };
-      ws.onclose = function(e){
-        addMessage("Disconnected",'text-warning');
-      };
-      ws.onerror = function(e){
-        console.log("ws error", e);
-        addMessage("Error",'text-warning');
-      };
-      ws.onmessage = function(e){
-        var msg = "";
-        if(e.data instanceof ArrayBuffer){
-          msg = "BIN:";
-          var bytes = new Uint8Array(e.data);
-          for (var i = 0; i < bytes.length; i++) {
-            msg += String.fromCharCode(bytes[i]);
-          }
-        } else {
-          msg = "TXT:"+e.data;
-        }
-        addMessage(msg);
-      };
-      var send_input = ge("message-send");
-      send_input.onkeydown = function(e){
-        stb();
-        if(e.keyCode == 13 && send_input.value != ""){
-          ws.send(send_input.value);
-          send_input.value = "";
-        }
-      }
-    }
-    function startEvents(){
-      var es = new EventSource('/events');
-      es.onopen = function(e) {
-        addMessage("Events Opened",'text-success');
-      };
-      es.onerror = function(e) {
-        if (e.target.readyState != EventSource.OPEN) {
-          addMessage("Events Closed",'text-warning');
-        }
-      };
-      es.onmessage = function(e) {
-        addMessage(e.data);
-      };
-      es.addEventListener('ota', function(e) {
-        addMessage(e.data);
-        // show the OTA alert and update it's progress
-        var json = JSON.parse(e.data);
-        if(json.ota) {
-        	$('#ota-dialog').modal({show:true});
-        	update_progress_bar('#ota-progress-bar', json.ota.progress);
-        }      
-      }, false);
-      es.addEventListener('scan', function(e) {
-        addMessage(e.data,'text-info');
-        // update the scan list
-        var json = JSON.parse(e.data);
-        if(json.scan) {
-        	if(json.scan.start) scan_start(json.scan);
-        	if(json.scan.bssid) scan_station(json.scan);
-        	if(json.scan.complete) scan_complete(json.scan);
-        	if(json.scan.state) scan_state(json.scan);
-        }
-      }, false);
-      es.addEventListener('servo', function(e) {
-        addMessage(e.data,'text-info');
-        // update the scan list
-        var json = JSON.parse(e.data);
-        if(json.servo) {
-        	if(json.servo.state) servo_state(json.servo);
-        }
-      }, false);
-      es.addEventListener('log', function(e) {
-        addMessage(e.data,'text-info');
-        // update the scan list
-        var json = JSON.parse(e.data);
-        if(json.log) {
-        	if(json.log.state) logging_state(json.log);
-	        if(json.log.storage) logging_storage(json.log);
-        }
-      }, false);
-      es.addEventListener('wifi', function(e) {
-        addMessage(e.data,'text-info');
-        // update the scan list
-        var json = JSON.parse(e.data);
-        if(json.wifi) {
-        	if(json.wifi.event) wifi_event(json.wifi);
-        }
-      }, false);
-      es.addEventListener('status', function(e) {
-        addMessage(e.data,'text-info');
-        // update UI status
-        var json = JSON.parse(e.data);
-        status_update(json.status);
-      }, false);
-    }
-    
-    function clear_old_messages(age_minutes) {
-    	age_minutes = age_minutes || 1; // 1 minute default
-    	// how long do we keep messages?
-    	var then = +(new Date) - age_minutes * 60 * 1000;
-    	// go through the message and remove old ones
-    	$('#messages-list > li').each(function(i,v) {
-    		var e = $(this);
-    		if(+e.attr('time') <= then) e.remove();
-    	});
-    }
-    // clear old messages every ten seconds
-    setInterval(clear_old_messages, 10*1000);
+	function update_progress_bar(id, p, t) {
+		if(typeof(p)==='number') {
+			$(id).css({ width:''+p+'%', 'aria-valuenow':p }).text(t || ''+p+'%');
+		}
+	}
+	function sendBlob(str){
+		var buf = new Uint8Array(str.length);
+		for (var i = 0; i < str.length; ++i) buf[i] = str.charCodeAt(i);
+		ws.send(buf);
+	}
+	function addMessage(m,style){
+		var msg = $('<li class="list-group-item">'); 
+		msg.text(m); // set message text
+		msg.attr('time', +(new Date) ); // set current time
+		msg.addClass( style ); // add styles
+		$("#messages-list").append(msg);
+		// msg.innerText = m;
+		// ge("messages").appendChild(msg);
+		stb();
+	}
+	function startSocket(){
+		ws = new WebSocket('ws://'+document.location.host+'/ws',['arduino']);
+		ws.binaryType = "arraybuffer";
+		ws.onopen = function(e){
+			addMessage("Connected",'text-success');
+		};
+		ws.onclose = function(e){
+			addMessage("Disconnected",'text-warning');
+		};
+		ws.onerror = function(e){
+			console.log("ws error", e);
+			addMessage("Error",'text-warning');
+		};
+		ws.onmessage = function(e){
+			var msg = "";
+			if(e.data instanceof ArrayBuffer){
+				msg = "BIN:";
+				var bytes = new Uint8Array(e.data);
+				for (var i = 0; i < bytes.length; i++) {
+					msg += String.fromCharCode(bytes[i]);
+				}
+			} else {
+				msg = "TXT:"+e.data;
+			}
+			addMessage(msg);
+		};
+		var send_input = ge("message-send");
+		send_input.onkeydown = function(e){
+			stb();
+			if(e.keyCode == 13 && send_input.value != ""){
+				ws.send(send_input.value);
+				send_input.value = "";
+			}
+		}
+	}
+	function startEvents(){
+		var es = new EventSource('/events');
+		es.onopen = function(e) {
+			addMessage("Events Opened",'text-success');
+		};
+		es.onerror = function(e) {
+			if (e.target.readyState != EventSource.OPEN) {
+				addMessage("Events Closed",'text-warning');
+			}
+		};
+		es.onmessage = function(e) {
+			addMessage(e.data);
+		};
+		es.addEventListener('ota', function(e) {
+			addMessage(e.data);
+			// show the OTA alert and update it's progress
+			var json = JSON.parse(e.data);
+			if(json.ota) {
+				$('#ota-dialog').modal({show:true});
+				update_progress_bar('#ota-progress-bar', json.ota.progress);
+			}      
+		}, false);
+		es.addEventListener('scan', function(e) {
+			addMessage(e.data,'text-info');
+			// update the scan list
+			var json = JSON.parse(e.data);
+			if(json.scan) {
+				if(json.scan.start) scan_start(json.scan);
+				if(json.scan.bssid) scan_station(json.scan);
+				if(json.scan.complete) scan_complete(json.scan);
+				if(json.scan.state) scan_state(json.scan);
+			}
+		}, false);
+		es.addEventListener('servo', function(e) {
+			addMessage(e.data,'text-info');
+			// update the scan list
+			var json = JSON.parse(e.data);
+			if(json.servo) {
+				if(json.servo.state) servo_state(json.servo);
+			}
+		}, false);
+		es.addEventListener('log', function(e) {
+			addMessage(e.data,'text-info');
+			// update the scan list
+			var json = JSON.parse(e.data);
+			if(json.log) {
+				if(json.log.state) logging_state(json.log);
+				if(json.log.storage) logging_storage(json.log);
+			}
+		}, false);
+		es.addEventListener('wifi', function(e) {
+			addMessage(e.data,'text-info');
+			// update the scan list
+			var json = JSON.parse(e.data);
+			if(json.wifi) {
+				if(json.wifi.event) wifi_event(json.wifi);
+			}
+		}, false);
+		es.addEventListener('status', function(e) {
+			addMessage(e.data,'text-info');
+			// update UI status
+			var json = JSON.parse(e.data);
+			status_update(json.status);
+		}, false);
+	}
+	
+	function clear_old_messages(age_minutes) {
+		age_minutes = age_minutes || 1; // 1 minute default
+		// how long do we keep messages?
+		var then = +(new Date) - age_minutes * 60 * 1000;
+		// go through the message and remove old ones
+		$('#messages-list > li').each(function(i,v) {
+			var e = $(this);
+			if(+e.attr('time') <= then) e.remove();
+		});
+	}
+	// clear old messages every ten seconds
+	setInterval(clear_old_messages, 10*1000);
 </script>
 <script>
 	//
-    function status_update(status) {
-        if(status.rssi) {
-        	var p = 100 + status.rssi;
-        	if(p<0) p = 0;
-        	if(p>100) p = 100;        	
-        	update_progress_bar('#signal-progress-bar', p, ''+status.rssi+'dBm');
-        }
-        if(status.vcc) {
-        	var p = Math.round(status.vcc / 4096 * 10000)/100;
-        	update_progress_bar('#voltage-progress-bar', p, ''+p+'%');
-        }
-        if(status.wifi) {
-        	if(status.wifi.connected_ssid) {
-        		$("#connected-ssid").text(status.wifi.connected_ssid);
-        	}
-        	if(status.wifi.local_ip) {
-        		$("#local-ip").text(status.wifi.local_ip);        		
-        	}
-        }
-        if(status.color) {        	
-        	$("#section-eye .well").css("background-color",status.color);
-        }
+	function status_update(status) {
+		if(status.rssi) {
+			var p = 100 + status.rssi;
+			if(p<0) p = 0;
+			if(p>100) p = 100;        	
+			update_progress_bar('#signal-progress-bar', p, ''+status.rssi+'dBm');
+		}
+		if(status.vcc) {
+			var p = Math.round(status.vcc / 4096 * 10000)/100;
+			update_progress_bar('#voltage-progress-bar', p, ''+p+'%');
+		}
+		if(status.wifi) {
+			if(status.wifi.connected_ssid) {
+				$("#connected-ssid").text(status.wifi.connected_ssid);
+			}
+			if(status.wifi.local_ip) {
+				$("#local-ip").text(status.wifi.local_ip);        		
+			}
+		}
+		if(status.color) {        	
+			$("#section-eye .well").css("background-color",status.color);
+		}
 	}
 	
 	function wifi_event(message) {
@@ -203,8 +207,8 @@
 	var scan_id = {};
 	
 	function scan_start(scan) {
-   		$('#scan-status').text("scanning");
-   		scan_list = [];
+ 		$('#scan-status').text("scanning");
+ 		scan_list = [];
 	}
 	
 	function scan_station(scan) {
@@ -228,59 +232,61 @@
 	}
 	
 	function scan_complete(scan) {
-   		$('#scan-status').empty()        		
+		// keep a list of the old entries
+	 	var rm_list = $('#scan-status').children()        		
 		// copy all the scan information to the ui
 		var list = $('#scan-list');
-   		list.empty();
-   		for(var i in scan_list) (function(i){
-   			var e = scan_list[i];
-   			var tr = $('<div class="scan-row row">');
-   			// name
-   			var td1 = $('<div class="scan-ssid col-md-5 col-xs-5">').appendTo(tr);
-   			td1.text(e.ssid);
-   			// is this the current access point?
-   			if(e.ap) {
-   				if(e.ota) { // perhaps check current mode instead?
-	   				// use ota icon
-	   				td1.append('&nbsp;<span class="glyphicon glyphicon-cog" aria-hidden="true"></span>'); 				
-	   			} else {
-	   				// mark current access point
-	   				td1.append('&nbsp;<span class="glyphicon glyphicon-ok" aria-hidden="true"></span>');	   				
-	   			}
-   				// change the row style
-   				tr.addClass('scan-row-ap');
-   			} else {
-   				if(e.auto) {
-	   				// mark the access point as being on the autoconnect list
-	   				td1.append('&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>');			
-	   			}
-   			}
-   			// signal strength
-   			var td5 = $('<div class="scan-rssi col-md-2 col-xs-2">').appendTo(tr);
-   			var rssi_dbm = ''+e.rssi + 'dBm';
-   			var rssi_perc = 100 + e.rssi; rssi_perc = Math.min(100,Math.max(0,rssi_perc));
-   			var rssi_html = '<div class="progress-bar" role="progressbar" aria-valuenow="'+rssi_perc+'" aria-valuemin="0" aria-valuemax="100" style="width:'+rssi_perc+'%;">'+rssi_dbm+'</div>'
-   			td5.append($(rssi_html));
-   			// channel
-   			var td4 = $('<div class="scan-channel col-md-1 col-xs-1 text-right">').appendTo(tr);
-   			td4.text(e.channel);
-   			// encryption
-   			var td3 = $('<div class="scan-encrypt col-md-1 col-xs-1">').appendTo(tr);
-   			td3.text(e.encrypt);
-   			/* if(e.encrypt!=='none') {
-   				// mark the access point as being on the autoconnect list
-   				td3.prepend('&nbsp;<span class="glyphicon glyphicon-lock" aria-hidden="true"></span>');			
-   			} */
-   			// mac address
-   			var td2 = $('<div class="scan-bssid col-md-2 col-xs-2">').appendTo(tr);
-   			td2.text(e.bssid);
-   			// make the row visible
-   			list.append(tr);
-   			// and add the click handler to open the dialog
-   			tr.on('click',function() {
-   				station_dialog($(this), e);
-   			});
-   		})(i);
+ 		list.empty();
+ 		for(var i in scan_list) (function(i){
+ 			var e = scan_list[i];
+ 			var tr = $('<div class="scan-row row">');
+ 			// name
+ 			var td1 = $('<div class="scan-ssid col-xs-5" style="padding-left:0;">').appendTo(tr);
+ 			td1.text(e.ssid);
+ 			// prepend a small square for the color flag
+ 			var color_flag = $('<span class="glyphicon glyphicon-stop" aria-hidden="true"></span>').prependTo(td1);
+ 			color_flag.css({ "color":e.color || '#000000', "padding-right":"0.5em", "padding-left":0 });
+ 			// autoconnect flags
+			if(e.auto) {
+				var icon = e.ota ? "cog" : "link"
+ 				// mark the access point as being on the autoconnect list
+ 				td1.append('&nbsp;<span class="glyphicon glyphicon-'+icon+'" aria-hidden="true"></span>');
+ 			}
+ 			// is this the current access point?
+ 			if(e.ap) {
+ 				// mark current access point
+ 				td1.append('&nbsp;<span class="glyphicon glyphicon-ok" aria-hidden="true"></span>');		 				
+ 				// change the row style
+ 				tr.addClass('scan-row-ap');
+ 			}
+ 			// signal strength
+ 			var td5 = $('<div class="scan-rssi col-xs-2">').appendTo(tr);
+ 			var rssi_dbm = ''+e.rssi + 'dBm';
+ 			var rssi_perc = 100 + e.rssi; rssi_perc = Math.min(100,Math.max(0,rssi_perc));
+ 			var rssi_html = '<div class="progress-bar" role="progressbar" aria-valuenow="'+rssi_perc+'" aria-valuemin="0" aria-valuemax="100" style="width:'+rssi_perc+'%;">'+rssi_dbm+'</div>'
+ 			td5.append($(rssi_html));
+ 			// channel
+ 			var td4 = $('<div class="scan-channel col-xs-1 text-right">').appendTo(tr);
+ 			td4.text(e.channel);
+ 			// encryption
+ 			var td3 = $('<div class="scan-encrypt col-xs-1">').appendTo(tr);
+ 			td3.text(e.encrypt);
+ 			/* if(e.encrypt!=='none') {
+ 				// mark the access point as being on the autoconnect list
+ 				td3.prepend('&nbsp;<span class="glyphicon glyphicon-lock" aria-hidden="true"></span>');			
+ 			} */
+ 			// mac address
+ 			var td2 = $('<div class="scan-bssid col-xs-2" style="padding-right:0;">').appendTo(tr);
+ 			td2.text(e.bssid);
+ 			// make the row visible
+ 			list.append(tr);
+ 			// and add the click handler to open the dialog
+ 			tr.on('click',function() {
+ 				station_dialog($(this), e);
+ 			});
+ 		})(i);
+ 		// remove the old entries (so the scrolling stays roughly where it was)
+ 		rm_list.remove();
 	}
 	
 	
@@ -290,7 +296,7 @@
 	};
 	
 	function scan_state(message) {
-   		$('#scan-mode').val(scan_state_option[message.state]);
+ 		$('#scan-mode').val(scan_state_option[message.state]);
 	}
 	
 	function fx_state(message) {
@@ -298,7 +304,7 @@
 	}
 
 	function servo_state(message) {
-   		$('#servo-mode').val(message.state);
+ 		$('#servo-mode').val(message.state);
 	}
 	
 	var logging_state_option = {
@@ -307,17 +313,17 @@
 	};
 
 	function logging_state(message) {
-   		$('#logging-mode').val(logging_state_option[message.state]);
+ 		$('#logging-mode').val(logging_state_option[message.state]);
 	}
 	
 	function logging_storage(message) {
 		var total = message.storage.total || 1;
 		var used = message.storage.used || 0;
 		var per = 100 - (used / total * 100); // turn it into storage available
-   		$('#storage-progress-bar')
-   			.attr('aria-currentvalue',per)
-   			.css({ width:''+per+'%', title:''+used+'/'+total })
-   			.text(''+(Math.round(per*100)/100)+'%');
+ 		$('#storage-progress-bar')
+ 			.attr('aria-currentvalue',per)
+ 			.css({ width:''+per+'%', title:''+used+'/'+total })
+ 			.text(''+(Math.round(per*100)/100)+'%');
 	}
 	
 	function json_dialog(url) {
@@ -327,22 +333,22 @@
 		$('#json-dialog-title').text(url);
 		// show the dialog
 		$('#json-dialog').modal({show:true});
-        // begin the ajax call
-        $.ajax({
-        	url: url,
-        	error: function(jqXHR, textStatus) { 
-        		content.html('<div>error</div>'); 
-        		$('<div class="error">').appendTo(content).text(textStatus); 
-        	},
-        	success: function(m) {
-        		content.empty();
-        		if(typeof(m)==='string') {
-	        		$('<pre>').appendTo(content).text(m);         		    			
-        		} else {
-        			$('<pre>').appendTo(content).text(JSON.stringify(m,null,2));       
-        		}
-        	}
-        })
+		// begin the ajax call
+		$.ajax({
+			url: url,
+			error: function(jqXHR, textStatus) { 
+				content.html('<div>error</div>'); 
+				$('<div class="error">').appendTo(content).text(textStatus); 
+			},
+			success: function(m) {
+				content.empty();
+				if(typeof(m)==='string') {
+					$('<pre>').appendTo(content).text(m);         							
+				} else {
+					$('<pre>').appendTo(content).text(JSON.stringify(m,null,2));       
+				}
+			}
+		})
 	}
 	
 	
@@ -351,32 +357,294 @@
 		$('#cd .btn-primary').attr('disabled',true);
 		// show the dialog
 		$('#cd').modal({show:true});
-        // get the system status again
-        $.ajax({
-        	url: 'system/config',
-        	error: function(jqXHR, textStatus) {
+		// get the system status again
+		$.ajax({
+			url: 'system/config',
+			error: function(jqXHR, textStatus) {
 				$('#cd').modal({show:false});
-        		console.error(textStatus);
-        	},
-        	success: function(m) {
-        		// copy all the values
-        		$('#cd-hostname').val(m.system.config.host_name);
-        		$('#cd-wifiname').val(m.system.config.wifi_name);
-        		$('#cd-txpower').val(m.system.config.wifi_txpower);
-        		$('#cd-txpower-label').text(""+parseFloat(m.system.config.wifi_txpower||0).toFixed(1));
-        		$('#cd-wifipassword').val(m.system.config.wifi_password ? '********':'');
-        		$('#cd-htname').val(m.system.config.htaccess_username);
-        		$('#cd-htpassword').val(m.system.config.htaccess_password ? '********':'');
-        		// servo blocks
-	        	for(var index=1; index<=2; index++) {
-		        	for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
-		        		$('#cds'+index+'-'+n).val( m.system.config.servo[index][n] )
-		        	}
-        		}
-        		// enable all the buttons
+				console.error(textStatus);
+			},
+			success: function(m) {
+				// copy all the values
+				$('#cd-hostname').val(m.system.config.host_name);
+				$('#cd-wifiname').val(m.system.config.wifi_name);
+				$('#cd-txpower').val(m.system.config.wifi_txpower);
+				$('#cd-txpower-label').text(""+parseFloat(m.system.config.wifi_txpower||0).toFixed(1));
+				$('#cd-wifipassword').val(m.system.config.wifi_password ? '********':'');
+				$('#cd-htname').val(m.system.config.htaccess_username);
+				$('#cd-htpassword').val(m.system.config.htaccess_password ? '********':'');
+				// servo blocks
+				for(var index=1; index<=SERVO_COUNT; index++) {
+					for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
+						$('#cds'+index+'-'+n).val( m.system.config.servo[index][n] )
+					}
+				}
+				// enable all the buttons
 				$('#cd .btn-primary').attr('disabled',false);
-        	}
-        })
+			}
+		})
+	}
+	
+	pose_editor_file = null;
+	pose_editor_data = {};
+	
+	function pose_dialog() {
+		// disable all the primary buttons
+		$('#pd .btn-primary').attr('disabled',true);
+		// show the dialog
+		$('#pd').modal({show:true});
+		// load up the currently selected pose
+		var n = $('#pose-selector').val();
+		pose_dialog_load(n);
+	}
+	
+	function pose_dialog_load(name) {
+		if(name != pose_editor_file) {
+			pose_editor_file = name;
+			$('#pd .btn-primary').attr('disabled',true);
+			// var url = "/edit?"+encodeURIComponent("edit=/pose/"+name+".json");
+			var url = "/pose/"+encodeURIComponent(name)+".json";
+			// load the pose file
+			$.ajax({
+				url: url,
+				error: function(jqXHR, textStatus) {
+					$('#pd').modal({show:false});
+					console.error(textStatus);
+					pose_editor_file = null;
+				},
+				success: pose_editor
+			})
+		}
+	}
+	
+	function pose_dialog_save(name,data) {
+		name = name || pose_editor_file;
+		data = data || pose_editor_data;
+		// create the multipart formdata
+		var form = new FormData();
+		var filename = "/pose/"+name+".json";
+		var blob = new Blob([ JSON.stringify(data) ], {type: "application/json"});
+		form.append('data',blob,filename);
+		// load the pose file
+		$.ajax({
+			url: '/edit',
+			type: 'POST',
+			data: form,
+			processData: false,
+			contentType: false,
+			complete: function() {
+				$('#pd .btn-primary').attr('disabled',false);		
+			}
+		})
+	}
+
+	
+	function pose_editor_row(parent,label,content1,content2,enabler) {
+		var r = $('<div class="row"/>');
+		var d1 = $('<div class="col-xs-3 text-right"/>').appendTo(r);
+		var row_label;
+		row_label = $("<label>").appendTo(d1)
+		row_label.text(label);
+		var checkbox;
+		if(enabler) {
+			row_label.append('&nbsp;');
+			checkbox = $('<input class="form-check-input" type="checkbox" />').appendTo(row_label);
+		}
+		r.appendTo(parent);
+		var field_enable = function(v) {
+			if(checkbox) checkbox.prop('checked',v===undefined ? false : true);
+		}
+		if(content1) {
+			var d2 = $('<div class="col-xs-6"/>').appendTo(r);
+			content1(d2,field_enable);
+		}
+		if(content2) {
+			var d3 = $('<div class="col-xs-3"/>').appendTo(r);
+			content2(d3,field_enable);
+		}
+		if(enabler) {
+			// call on change
+			checkbox.on('change input',function() {
+				enabler( checkbox.prop('checked') );
+			});
+		}
+	}
+	
+	function pose_editor_color(parent,data,field,label) {
+		var display_e;
+		var input;
+		pose_editor_row(parent,label,function(parent,enable) {
+			input = $('<input class="form-control" type="color" value="#000000" />');
+			input.val(data[field]); enable(!!data[field]);
+			input.appendTo(parent);
+			input.on('change input',function() {
+				display_e.text( data[field] = input.val() );
+				enable(true);
+			});
+		},function(parent,enable) {
+			display_e = $('<label/>').appendTo(parent);
+			if(data[field]) display_e.text(data[field]);
+			enable(data[field]);
+		},function(enabled) {
+			// update the display
+			if(enabled) {
+				data[field] = input.val();
+			} else {
+				delete data[field];
+			}
+			display_e.text( enabled ? data[field] : '' );
+		});
+	}
+	
+	function pose_editor_range(parent,data,field,label,min,max,step) {
+		var display_e;
+		var input;
+		pose_editor_row(parent,label,function(parent,enable) {
+			input = $('<input class="form-control" type="range" />');
+			if(min !== undefined) input.attr('min',min);
+			if(max !== undefined) input.attr('max',max);
+			if(step !== undefined) input.attr('step',step);
+			input.val(data[field]); enable(!!data[field]);
+			input.appendTo(parent);
+			input.on('change input',function() {
+				display_e.text( data[field] = parseFloat(input.val()) );
+				enable(true);
+			});			
+		},function(parent,enable) {
+			display_e = $('<label/>').appendTo(parent);
+			if(data[field]!==undefined) display_e.text(data[field]);
+			enable(data[field]);
+		},function(enabled) {
+			// update the display
+			if(enabled) {
+				data[field] = parseFloat(input.val());
+			} else {
+				delete data[field];
+			}
+			display_e.text( enabled ? data[field] : '' );
+		});
+	}
+	
+	function pose_editor_indexlist(parent,data,field,label,min,max) {
+		var checks = {};
+		function get_checks() {
+			r = [];
+			for(var i in checks) if(checks[i].prop('checked')) r.push(parseFloat(i));
+			return r.length ? r : undefined;
+		}
+		// pre-index the list values
+		var check_index = {};
+		var list = data[field] || [];
+		for(var i in list) check_index[list[i]] = true;
+		// change event
+		function list_changed() {
+			// update the data
+			data[field] = get_checks();
+		}
+		pose_editor_row(parent,label,function(parent,enable) {
+			// create an indexed label for
+			for(var i=min; i<=max; i++) {
+				var label = $('<label>').appendTo(parent);
+				label.html('&nbsp;'+i+'&nbsp;&nbsp;');
+				var input = $('<input class="form-check-input" type="checkbox" />').prependTo(label);
+				input.prop('checked',check_index[i]);
+				input.on('change input',list_changed);
+				checks[i]=input;
+			}
+			// enable if we had data
+			enable(data[field]);
+		},null,function(enabled) {
+			// update the display
+			if(enabled) {
+				data[field] = get_checks();
+			} else {
+				delete data[field];
+			}
+			for(var i in checks) checks[i].prop('disable',!enabled)
+		});
+	}
+
+	
+	function pose_editor_branch(parent,data,field,label,content) {
+		// create a row for the branch checkbox
+		var r = $('<div class="row"/>');
+		var d1 = $('<div class="col-xs-12"/>').appendTo(r);
+		var cbl = $('<label>').appendTo(d1).text(label);
+		cbl.prepend('&nbsp;&nbsp;');
+		var cb = $('<input class="form-check-input" type="checkbox"/>').prependTo(cbl);
+		// create a div for the content
+		var d2 = $('<div/>').appendTo(r);
+		r.appendTo(parent);
+		// set the initial state
+		var branch = data[field];
+		cb.prop("checked",!!branch)
+		if(!branch) d2.hide();
+		// make sure we have a branch object from now on
+		branch = branch || {};
+		// link up the change handler
+		cb.on('change input',function() {
+			var v = cb.prop("checked");
+			if(v) {
+				data[field] = branch;
+				d2.show();
+			} else {
+				delete data[field];
+				d2.hide();
+			}
+		});
+		// instance the content into the hideable div
+		content(d2,branch);
+	}
+	
+	
+	function pose_editor(data) {
+		// retain the data structure
+		pose_editor_data = data;
+		var div = $('#pose-editor').empty();
+		// make sure enough structure is there for the editor
+		if(typeof(data.led)!=='object') data.led = {};
+		if(typeof(data.servo)!=='object') data.servo = {};
+		// led blocks
+		for(var index=1; index<=LED_COUNT; index++) {
+			// add another led editor section
+			pose_editor_branch(div,data.led,""+index,"Neopixel "+index, function (parent,branch) {
+				// instance the content into the hideable div
+				pose_editor_color(parent,branch,'c','Color');
+				pose_editor_color(parent,branch,'n','Flicker');
+				pose_editor_range(parent,branch,'t','Time',0,2,0.01);		
+			});
+		}
+		// servo blocks
+		for(var index=1; index<=SERVO_COUNT; index++) {
+			// add another servo editor section
+			pose_editor_branch(div,data.servo,""+index,"Servo "+index, function (parent,branch) {
+				// instance the content into the hideable div
+				pose_editor_range(parent,branch,'p','Position',-90,90,0.1);
+				pose_editor_range(parent,branch,'v','Speed',0,200,1);
+				pose_editor_range(parent,branch,'tw','Twitch',0,90,0.1);
+			});
+		}
+		// twitch section
+		pose_editor_branch(div,data,"twitch","Twitch", function (parent,branch) {
+			// instance the content into the hideable div
+			pose_editor_indexlist(parent,branch,'s','Servos',1,SERVO_COUNT);
+			pose_editor_range(parent,branch,'t','Time',0,60,0.1);
+		});
+		// enable all the buttons
+		$('#pd .btn-primary').attr('disabled',false);
+	}
+	
+	
+	function ui_poses(list) {
+		// clear the old lists
+		var d1 = $('#pose-list').empty();
+		var d2 = $('#pose-selector').empty();
+		// add the entries
+		for(var i in list) {
+			e = list[i];
+			$('<button class="action-pose btn btn-default btn-sm" type="button"></button>').appendTo(d1).text(e);
+			$('<option></button>').appendTo(d2).attr('value',e).text(e);			
+		}		
 	}
 	
 	function ui_status(message) {
@@ -388,6 +656,7 @@
 			logging_storage(status);
 			fx_state(status.fx);
 			if(status.servos_state) $('#servo-mode').val(status.servos_state);
+			if(status.poses) ui_poses(status.poses);
 		}
 	}
 
@@ -406,36 +675,36 @@
 	function ap_dialog_action(mode) {
 		// start the message
 		var m = {"wifi":{"mode":mode}};
-       	m.wifi.ssid = $('#ap-dialog-ssid').val();
-       	m.wifi.bssid = $('#ap-dialog-bssid').text();
-       	// get the password
-       	var pass = dialog_password('#ap-dialog-password');
-       	if(pass !== undefined ) {
-        	m.wifi.password = pass;        		
-       	}
-       	m.wifi.priority = $('#ap-dialog-priority').val();
-       	m.wifi.auto = $('#ap-dialog-auto').is(':checked');
-       	m.wifi.ota = $('#ap-dialog-ota').is(':checked');
-       	m.wifi.fx = $('#ap-dialog-fx').val();
-       	m.wifi.color = $('#ap-dialog-color').val();
-       	// find the entry in the scan list and also update the data there
-       	for(var i in scan_list) {
-       		var e =scan_list[i];
-       		if(e.bssid == m.wifi.bssid) {
-       			// found it. copy properties
-       			for( n in { priority:0, auto:0, ota:0, fx:0, color:0, password:0 } ) {
-       				if(m.wifi[n]) e[n] = m.wifi[n];
-       			}
-       			break;
-       		}
-       	}
-       	console.log(JSON.stringify(m));
+	 	m.wifi.ssid = $('#ap-dialog-ssid').val();
+	 	m.wifi.bssid = $('#ap-dialog-bssid').text();
+	 	// get the password
+	 	var pass = dialog_password('#ap-dialog-password');
+	 	if(pass !== undefined ) {
+			m.wifi.password = pass;        		
+	 	}
+	 	m.wifi.priority = $('#ap-dialog-priority').val();
+	 	m.wifi.auto = $('#ap-dialog-auto').is(':checked');
+	 	m.wifi.ota = $('#ap-dialog-ota').is(':checked');
+	 	m.wifi.fx = $('#ap-dialog-fx').val();
+	 	m.wifi.color = $('#ap-dialog-color').val();
+	 	// find the entry in the scan list and also update the data there
+	 	for(var i in scan_list) {
+	 		var e =scan_list[i];
+	 		if(e.bssid == m.wifi.bssid) {
+	 			// found it. copy properties
+	 			for( n in { priority:0, auto:0, ota:0, fx:0, color:0, password:0 } ) {
+	 				if(m.wifi[n]) e[n] = m.wifi[n];
+	 			}
+	 			break;
+	 		}
+	 	}
+	 	console.log(JSON.stringify(m));
 		ws.send(JSON.stringify(m));	
 	}
 	
 	$(function() {
 		startSocket();
-      	startEvents();
+		startEvents();
 		// attach handlers
 		$('#servo\\.1').on('input', function(e,v) {
 			var v = $('#servo\\.1').val();
@@ -485,36 +754,48 @@
 			var m = {"log":{"clear":"all"}};
 			ws.send(JSON.stringify(m));	
 		});
+		$('#action-pose-editor').on('click', function() {
+			pose_dialog();
+		});
+		$('#action-pose-save').on('click', function() {
+			console.log(pose_editor_file,pose_editor_data);
+			// send the updated file back to the server
+			if(pose_editor_file) pose_dialog_save();
+		});
+		$('#pose-selector').on('change input',function() {
+			var name = $(this).val();
+			pose_dialog_load(name);
+		})
 		$('#ap-dialog-priority').on('input', function() {
 			var v = $('#ap-dialog-priority').val();
 			$('#ap-dialog-priority-text').text(v || '0');			
 		});
-        // select the entire contents on focus
+				// select the entire contents on focus
 		$('#ap-dialog-password').on('focus', function() {
-		    var e = $(this)
-		        .one('mouseup.mouseupSelect', function() {
-		            e.select();
-		            return false;
-		        })
-		        .one('mousedown', function() {
-		            // compensate for untriggered 'mouseup' caused by focus via tab
-		            e.off('mouseup.mouseupSelect');
-		        })
-		        .select();
+			var e = $(this)
+				.one('mouseup.mouseupSelect', function() {
+						e.select();
+						return false;
+				})
+				.one('mousedown', function() {
+						// compensate for untriggered 'mouseup' caused by focus via tab
+						e.off('mouseup.mouseupSelect');
+				})
+				.select();
 		});
-        $('#action-ap-connect').on('click', function() {
-        	ap_dialog_action("connect");
+		$('#action-ap-connect').on('click', function() {
+			ap_dialog_action("connect");
 		});
-        $('#action-ap-save').on('click', function() {
-        	ap_dialog_action("save");
+		$('#action-ap-save').on('click', function() {
+			ap_dialog_action("save");
 		});
-        $('#action-configuration').on('click', config_dialog);
+		$('#action-configuration').on('click', config_dialog);
  		$('#action-config-host-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				"hostname":$('#cd-hostname').val()
 			}}));
-        });
-        $('#action-config-wifi-save').on('click', function() {
+		});
+		$('#action-config-wifi-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				'ap':{
 					"ssid":$('#cd-wifiname').val(),
@@ -522,70 +803,71 @@
 					"txpower":parseFloat($('#cd-txpower').val())
 				}
 			}}));
-        });
-        $('#cd-txpower').on('change input', function(e,v) {
+		});
+		$('#cd-txpower').on('change input', function(e,v) {
 			var v = $(e.target).val();
 			$('#cd-txpower-label').text(""+parseFloat(v||0).toFixed(1));
 		});
-        $('#action-config-htaccess-save').on('click', function() {
+		$('#action-config-htaccess-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				'htaccess':{
 					"username":$('#cd-htname').val(),
 					"password":$('#cd-htpassword').val()
 				}
 			}}));
-        });  
-        $('#action-config-fx-save').on('click', function() {
+		});  
+		$('#action-config-fx-save').on('click', function() {
 			ws.send(JSON.stringify({"config":{
 				'fx':{
 					"servo_start":$('#fx-servo-start').val()
 				}
 			}}));
-        });
-        $('#action-wifi-reconnect').on('click', function() {
+		});
+		$('#action-wifi-reconnect').on('click', function() {
 			ws.send(JSON.stringify({"wifi":{
 				'mode':'reconnect'
 			}}));
-        });
-        $('body').on('click', '.action-pose', function() {
-        	var name = $(this).text();
-        	ws.send(JSON.stringify({"fx":{
-        		'pose':name
-        	}}));
-        });
-        // servo config
-        for(var index=1; index<=2; index++) (function(index) {
-        	// 
-	        $('#action-config-servo'+index+'-save').on('click', function() {
-	        	// build a servo config message
-	        	var m = {"config":{"servo":{}}};
-	        	var ms = m.config.servo[index] = {};
-	        	// from the form values
-	        	for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
-	        		ms[n] = $('#cds'+index+'-'+n).val()
-	        	}
+		});
+		$('body').on('click', '.action-pose', function() {
+			var name = $(this).text();
+			ws.send(JSON.stringify({"fx":{
+				'pose':name
+			}}));
+		});
+		// servo config
+		for(var index=1; index<=2; index++) (function(index) {
+			// 
+			$('#action-config-servo'+index+'-save').on('click', function() {
+				// build a servo config message
+				var m = {"config":{"servo":{}}};
+				var ms = m.config.servo[index] = {};
+				// from the form values
+				for(var n in {"pin":true,"min_micros":true,"max_micros":true,"zero_micros":true,"unit_scaling":true}) {
+					ms[n] = $('#cds'+index+'-'+n).val()
+				}
 				ws.send(JSON.stringify(m));
-	        });  
-        })(index);
-        
+			});  
+		})(index);
+				
 		// request the current ui status and then update
 		$.ajax({
-        	url: 'ui/status',
-        	error: function(jqXHR, textStatus) { },
-        	success: ui_status
-        })
+			url: 'ui/status',
+			error: function(jqXHR, textStatus) { },
+			success: ui_status
+		})
 	});
 </script>
 <style>
-	body { background-color:#463B26; }
+	html { min-width:640px; min-height:600px; height:100%; }
+	body { background-color:#463B26; min-width:640px; min-height:600px; height:100%; position:relative; }
 	.ui-section {  }
 	.ui-section > .well { overflow-y:scroll; height:100%; margin:0; }
 	.ui-section > .well > .row { margin-left:0; margin-right:0; }
 	#section-eye { position:absolute; left:47%; right:47%; top:46%; bottom:46%; }
-	#section-scan { position:absolute; left:5%; right:5%; top:3%; height:35%; }
-	#section-servo { position:absolute; left:5%; right:55%; top:40%; height:30%; }
-	#section-status { position:absolute; left:55%; right:5%; top:40%; height:30%; }
-	#section-console { position:absolute; left:5%; right:5%; bottom:3%; height:25%; }
+	#section-scan { position:absolute; left:3%; right:3%; top:3%; height:35%; }
+	#section-servo { position:absolute; left:3%; right:55%; top:40%; height:30%; }
+	#section-status { position:absolute; left:55%; right:3%; top:40%; height:30%; }
+	#section-console { position:absolute; left:3%; right:3%; bottom:2%; height:25%; }
 	#section-console .list-group { font-size:10px; }
 	#section-console .list-group-item { font-size:10px; padding:1px; 6px; }
 	#section-eye .well { height:100%; }
@@ -593,377 +875,390 @@
 	.scan-row { color:#fff; }
 	.scan-row-ap { color:#ffc; }
 	.scan-row:hover { background-color:#000; cursor:pointer; }
-   	/* .scan-ssid { width:30%; font-weight:bold; }
-   	.scan-bssid { width:30%; color:#ccc; }
-   	.scan-channel { width:10%; font-weight:bold; }
-   	.scan-encrypt { width:10%; color:#ccc; }
-   	.scan-rssi { width:20%; } */
-   	.scan-ssid { font-weight:bold; }
-   	.scan-bssid { color:#ccc; }
-   	.scan-channel { font-weight:bold; }
-   	.scan-encrypt { color:#ccc; }
-   	.scan-rssi {  }
+	 	/* .scan-ssid { width:30%; font-weight:bold; }
+	 	.scan-bssid { width:30%; color:#ccc; }
+	 	.scan-channel { width:10%; font-weight:bold; }
+	 	.scan-encrypt { width:10%; color:#ccc; }
+	 	.scan-rssi { width:20%; } */
+	 	.scan-ssid { font-weight:bold; }
+	 	.scan-bssid { color:#ccc; }
+	 	.scan-channel { font-weight:bold; }
+	 	.scan-encrypt { color:#ccc; }
+	 	.scan-rssi {  }
 	.scan-row .progress-bar { margin:1px; }
-   	
-   	#scan-status { text-align:center; color:#888; }
-   	.ui-progress { margin:1px 6px; padding:0; background-color:#666; }
-   	.ui-progress-icon { padding-top:2px; }
-   	
+	 	
+	 	#scan-status { text-align:center; color:#888; }
+	 	.ui-progress { margin:1px 6px; padding:0; background-color:#666; }
+	 	.ui-progress-icon { padding-top:2px; }
+	 	
 </style>
 </head>
 <body>
 <!-- system config dialog -->
 <div id="cd" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">Configuration</h4>
-      </div>
-	<!-- Collapsible sections 
-    <div id="accordion" role="tablist" aria-multiselectable="false">-->
-    <div class="container-fluid">
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs1"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc1" aria-expanded="true" aria-controls="cdc1">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Local Host
-	    	</a></h4></div>
-	    	<div id="cdc1" class="collapse" role="tabpanel" aria-labelledby="cs1"><div class="card-block">
-               <div class="modal-body form-horizontal">
-				  <p class="help-block">Host information used by OTA to identify devices.</p>
-				  <input type="hidden" id="ap-dialog-ssid" />
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-hostname">hostname</label></div>
-				    <div class="col-md-8"><input id="cd-hostname" class="form-control" /></div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-host-save">Save</button></div>
-				  </div>
-               </div>
-	   		</div></div>
-		</div>
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs2"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc2" aria-expanded="true" aria-controls="cdc2">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> WiFi Access Point
-	    	</a></h4></div>
-	    	<div id="cdc2" class="collapse" role="tabpanel" aria-labelledby="cs2"><div class="card-block">
-               <div class="modal-body form-horizontal">
-				  <p class="help-block">Settings for the WiFi Access Point this device broadcasts.</p>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-wifiname">name</label></div>
-				    <div class="col-md-8"><input id="cd-wifiname" class="form-control"/></div>
-				  </div>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-wifipassword">password</label></div>
-				    <div class="col-md-8"><input id="cd-wifipassword" class="form-control" value="********" /></div>
-				  </div>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-wifiname">TX power</label></div>
-				    <div class="col-md-6"><input id="cd-txpower" type="range" min="0" max="20.5" step="0.5" value="0" /></div>
-				    <div class="col-md-2 text-right"><label>+<span id="cd-txpower-label">0.0</span> dB</div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-wifi-save">Save</button></div>
-				  </div>
-               </div>
-	   		</div></div>
-		</div>
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs3"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc3" aria-expanded="true" aria-controls="cdc3">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> HTTP Authorization
-	    	</a></h4></div>
-	    	<div id="cdc3" class="collapse" role="tabpanel" aria-labelledby="cs3"><div class="card-block">
-               <div class="modal-body form-horizontal">
-				  <p class="help-block">Web Authentication credentials. (Only applies to the <a href="/edit" target="_blank">File Editor</a> and is obviously not very secure. Demo only.)</p>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-htname">name</label></div>
-				    <div class="col-md-8"><input id="cd-htname" class="form-control"/></div>
-				  </div>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cd-htpassword">password</label></div>
-				    <div class="col-md-8"><input id="cd-htpassword" class="form-control" value="********" /></div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-htaccess-save">Save</button></div>
-				  </div>
-               </div>
-	   		</div></div>
-		</div>
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs6"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc6" aria-expanded="true" aria-controls="cdc6">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> FX
-	    	</a></h4></div>
-	    	<div id="cdc6" class="collapse" role="tabpanel" aria-labelledby="cs6"><div class="card-block">
-               <div class="modal-body form-horizontal">
-				  <p class="help-block">Settings for the servo/lighting special effects.</p>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="fx-servo-start">Servo Startup</label></div>
-				    <div class="col-md-4" ><select id="fx-servo-start" class="form-control input-sm">
-					  <option value="off">off</option>
-					  <option value="on">on</option>
-					  <option value="auto">auto</option>
-					</select></div>
-			        <div class="col-md-4">&nbsp;</div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-fx-save">Save</button></div>
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 class="modal-title">Configuration</h4>
+			</div>
+			<div class="container-fluid">
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs1"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc1" aria-expanded="true" aria-controls="cdc1">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Local Host
+					</a></h4></div>
+					<div id="cdc1" class="collapse" role="tabpanel" aria-labelledby="cs1"><div class="card-block">
+						<div class="modal-body form-horizontal">
+							<p class="help-block">Host information used by OTA to identify devices.</p>
+							<input type="hidden" id="ap-dialog-ssid" />
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-hostname">hostname</label></div>
+								<div class="col-md-8"><input id="cd-hostname" class="form-control" /></div>
+								<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-host-save">Save</button></div>
+							</div>
+						</div>
+				 	</div></div>
 				</div>
-               </div>
-	   		</div></div>
-		</div>
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs4"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc4" aria-expanded="true" aria-controls="cdc4">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 1
-	    	</a></h4></div>
-	    	<div id="cdc4" class="collapse" role="tabpanel" aria-labelledby="cs4"><div class="card-block">
-              <div class="modal-body form-horizontal">
-				<p class="help-block">Hardware setup for the first servo motor.</p>
-                <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds1-min_micros">min</label></div>
-				    <div class="col-md-4"><input id="cds1-min_micros" class="form-control"/></div>
-				    <div class="col-md-2"><label for="cds1-max_micros">max</label></div>
-				    <div class="col-md-4"><input id="cds1-max_micros" class="form-control"/></div>
-			    </div>
-				<div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds1-zero_micros">zero</label></div>
-				    <div class="col-md-4"><input id="cds1-zero_micros" class="form-control"/></div>
-				    <div class="col-md-2"><label for="cds1-unit_scaling">scale</label></div>
-				    <div class="col-md-4"><input id="cds1-unit_scaling" class="form-control"/></div>
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs2"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc2" aria-expanded="true" aria-controls="cdc2">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> WiFi Access Point
+					</a></h4></div>
+					<div id="cdc2" class="collapse" role="tabpanel" aria-labelledby="cs2"><div class="card-block">
+						<div class="modal-body form-horizontal">
+							<p class="help-block">Settings for the WiFi Access Point this device broadcasts.</p>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-wifiname">name</label></div>
+								<div class="col-md-8"><input id="cd-wifiname" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-wifipassword">password</label></div>
+								<div class="col-md-8"><input id="cd-wifipassword" class="form-control" value="********" /></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-wifiname">TX power</label></div>
+								<div class="col-md-6"><input id="cd-txpower" type="range" min="0" max="20.5" step="0.5" value="0" /></div>
+								<div class="col-md-2 text-right"><label>+<span id="cd-txpower-label">0.0</span> dB</div>
+								<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-wifi-save">Save</button></div>
+							</div>
+						</div>
+			 		</div></div>
 				</div>
-				<div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds1-pin">pin</label></div>
-				    <!-- <div class="col-md-4"><input id="cds1-pin" class="form-control"/></div> -->
-				    <div class="col-md-4" ><select id="cds1-pin" class="form-control input-sm">
-					  <option value="0">none</option>
-					  <option value="1">Pin 1</option>
-					  <option value="3">Pin 3</option>
-					  <option value="4">Pin 4</option>
-					  <option value="5">Pin 5</option>
-					  <option value="12">Pin 12</option>
-					  <option value="13">Pin 13</option>
-					  <option value="14">Pin 14</option>
-					</select></div>
-			        <div class="col-md-4">&nbsp;</div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo1-save">Save</button></div>
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs3"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc3" aria-expanded="true" aria-controls="cdc3">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> HTTP Authorization
+					</a></h4></div>
+					<div id="cdc3" class="collapse" role="tabpanel" aria-labelledby="cs3"><div class="card-block">
+						<div class="modal-body form-horizontal">
+							<p class="help-block">Web Authentication credentials. (Only applies to the <a href="/edit" target="_blank">File Editor</a> and is obviously not very secure. Demo only.)</p>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-htname">name</label></div>
+								<div class="col-md-8"><input id="cd-htname" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cd-htpassword">password</label></div>
+								<div class="col-md-8"><input id="cd-htpassword" class="form-control" value="********" /></div>
+									<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-htaccess-save">Save</button></div>
+							</div>
+						</div>
+			 		</div></div>
 				</div>
-              </div>
-	   		</div></div>
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs6"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc6" aria-expanded="true" aria-controls="cdc6">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> FX
+					</a></h4></div>
+					<div id="cdc6" class="collapse" role="tabpanel" aria-labelledby="cs6"><div class="card-block">
+						<div class="modal-body form-horizontal">
+							<p class="help-block">Settings for the servo/lighting special effects.</p>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="fx-servo-start">Servo Startup</label></div>
+								<div class="col-md-4" ><select id="fx-servo-start" class="form-control input-sm">
+								<option value="off">off</option>
+								<option value="on">on</option>
+								<option value="auto">auto</option>
+							</select></div>
+									<div class="col-md-4">&nbsp;</div>
+									<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-fx-save">Save</button></div>
+							</div>
+						</div>
+			 		</div></div>
+				</div>
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs4"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc4" aria-expanded="true" aria-controls="cdc4">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 1
+					</a></h4></div>
+					<div id="cdc4" class="collapse" role="tabpanel" aria-labelledby="cs4"><div class="card-block">
+						<div class="modal-body form-horizontal">
+							<p class="help-block">Hardware setup for the first servo motor.</p>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds1-min_micros">min</label></div>
+								<div class="col-md-4"><input id="cds1-min_micros" class="form-control"/></div>
+								<div class="col-md-2"><label for="cds1-max_micros">max</label></div>
+								<div class="col-md-4"><input id="cds1-max_micros" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds1-zero_micros">zero</label></div>
+								<div class="col-md-4"><input id="cds1-zero_micros" class="form-control"/></div>
+								<div class="col-md-2"><label for="cds1-unit_scaling">scale</label></div>
+								<div class="col-md-4"><input id="cds1-unit_scaling" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds1-pin">pin</label></div>
+								<!-- <div class="col-md-4"><input id="cds1-pin" class="form-control"/></div> -->
+								<div class="col-md-4" ><select id="cds1-pin" class="form-control input-sm">
+									<option value="0">none</option>
+									<option value="1">Pin 1</option>
+									<option value="3">Pin 3</option>
+									<option value="4">Pin 4</option>
+									<option value="5">Pin 5</option>
+									<option value="12">Pin 12</option>
+									<option value="13">Pin 13</option>
+									<option value="14">Pin 14</option>
+								</select></div>
+								<div class="col-md-4">&nbsp;</div>
+								<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo1-save">Save</button></div>
+							</div>
+						</div>
+			 		</div></div>
+				</div>
+				<div class="card card-block">
+					<div class="card-header" role="tab" id="cs5"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc5" aria-expanded="true" aria-controls="cdc5">
+						<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 2
+					</a></h4></div>
+					<div id="cdc5" class="collapse" role="tabpanel" aria-labelledby="cs5"><div class="card-block">
+						<div class="modal-body form-horizontal">
+						 	<p class="help-block">Hardware setup for the second servo motor.</p>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds2-min_micros">min</label></div>
+								<div class="col-md-4"><input id="cds2-min_micros" class="form-control"/></div>
+								<div class="col-md-2"><label for="cds2-max_micros">max</label></div>
+								<div class="col-md-4"><input id="cds2-max_micros" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds2-zero_micros">zero</label></div>
+								<div class="col-md-4"><input id="cds2-zero_micros" class="form-control"/></div>
+								<div class="col-md-2"><label for="cds2-unit_scaling">scale</label></div>
+								<div class="col-md-4"><input id="cds2-unit_scaling" class="form-control"/></div>
+							</div>
+							<div class="form-group form-group-sm">
+								<div class="col-md-2"><label for="cds2-pin">pin</label></div>
+								<!--  <div class="col-md-4"><input id="cds2-pin" class="form-control"/></div> -->
+								<div class="col-md-4" ><select id="cds2-pin" class="form-control input-sm">
+									<option value="0">none</option>
+									<option value="1">Pin 1</option>
+									<option value="3">Pin 3</option>
+									<option value="4">Pin 4</option>
+									<option value="5">Pin 5</option>
+									<option value="12">Pin 12</option>
+									<option value="13">Pin 13</option>
+									<option value="14">Pin 14</option>
+								</select></div>
+								<div class="col-md-4">&nbsp;</div>
+								<div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo2-save">Save</button></div>
+							</div>
+						</div>
+			 		</div></div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+			</div>
 		</div>
-    	<div class="card card-block">
-    		<div class="card-header" role="tab" id="cs5"><h4><a data-toggle="collapse" data-parent="#accordion" href="#cdc5" aria-expanded="true" aria-controls="cdc5">
-	    		<span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span> Servo Motor 2
-	    	</a></h4></div>
-	    	<div id="cdc5" class="collapse" role="tabpanel" aria-labelledby="cs5"><div class="card-block">
-               <div class="modal-body form-horizontal">
-				 <p class="help-block">Hardware setup for the second servo motor.</p>
-                 <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds2-min_micros">min</label></div>
-				    <div class="col-md-4"><input id="cds2-min_micros" class="form-control"/></div>
-				    <div class="col-md-2"><label for="cds2-max_micros">max</label></div>
-				    <div class="col-md-4"><input id="cds2-max_micros" class="form-control"/></div>
-				  </div>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds2-zero_micros">zero</label></div>
-				    <div class="col-md-4"><input id="cds2-zero_micros" class="form-control"/></div>
-				    <div class="col-md-2"><label for="cds2-unit_scaling">scale</label></div>
-				    <div class="col-md-4"><input id="cds2-unit_scaling" class="form-control"/></div>
-				  </div>
-				  <div class="form-group form-group-sm">
-				    <div class="col-md-2"><label for="cds2-pin">pin</label></div>
-				    <!--  <div class="col-md-4"><input id="cds2-pin" class="form-control"/></div> -->
-				    <div class="col-md-4" ><select id="cds2-pin" class="form-control input-sm">
-					  <option value="0">none</option>
-					  <option value="1">Pin 1</option>
-					  <option value="3">Pin 3</option>
-					  <option value="4">Pin 4</option>
-					  <option value="5">Pin 5</option>
-					  <option value="12">Pin 12</option>
-					  <option value="13">Pin 13</option>
-					  <option value="14">Pin 14</option>
-					</select></div>
-			        <div class="col-md-4">&nbsp;</div>
-			        <div class="col-md-2"><button type="button" class="btn btn-sm btn-primary btn-block" id="action-config-servo2-save">Save</button></div>
-				  </div>
-               </div>
-	   		</div></div>
-		</div>	
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
+	</div>
 </div>
 <!-- access point dialog -->
 <div id="ap-dialog" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 id="ap-dialog-title" class="modal-title"></h4>
-      </div>
-      <div class="modal-body form-horizontal">
-		  <input type="hidden" id="ap-dialog-ssid" />
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-bssid">BSSID</label></div>
-		    <div class="col-xs-10" id="ap-dialog-bssid"></div>
-		  </div>
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-password">Password</label></div>
-		    <div class="col-xs-8"><input id="ap-dialog-password" class="form-control" value="********" /></div>
-		  </div>
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-priority">Priority</label></div>
-		    <div class="col-xs-8" ><input id="ap-dialog-priority" type="range" min="0" max="10" value="5" /></div>
-		    <div class="col-xs-1"><label id="ap-dialog-priority-text"></label></div>
-		  </div>
-		  <div class="form-group">
-		    <div class="col-xs-2"></div>
-		    <div class="col-xs-8">
-		    	<label><input  id="ap-dialog-auto" type="checkbox">&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>&nbsp;Auto&nbsp;Connect</label><br/>
-		    	<label><input  id="ap-dialog-ota" type="checkbox">&nbsp;<span class="glyphicon glyphicon-cog" aria-hidden="true"></span>&nbsp;OTA&nbsp;Updates</label><br/>
-		    </div>
-		  </div>
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-fx">FX</label></div>
-		    <div class="col-xs-8" ><select id="ap-dialog-fx" class="form-control input-sm">
-			  <option value="none">none</option>
-			  <option value="ignore">ignore</option>
-			  <option value="track">track</option>
-			  <option value="happy">happy</option>
-			  <option value="angry">angry</option>
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 id="ap-dialog-title" class="modal-title"></h4>
+			</div>
+			<div class="modal-body form-horizontal">
+			<input type="hidden" id="ap-dialog-ssid" />
+			<div class="form-group">
+				<div class="col-xs-2"><label for="ap-dialog-bssid">BSSID</label></div>
+				<div class="col-xs-10" id="ap-dialog-bssid"></div>
+			</div>
+			<div class="form-group">
+				<div class="col-xs-2"><label for="ap-dialog-password">Password</label></div>
+				<div class="col-xs-8"><input id="ap-dialog-password" class="form-control" value="********" /></div>
+			</div>
+			<div class="form-group">
+				<div class="col-xs-2"><label for="ap-dialog-priority">Priority</label></div>
+				<div class="col-xs-8" ><input id="ap-dialog-priority" type="range" min="0" max="10" value="5" /></div>
+				<div class="col-xs-1"><label id="ap-dialog-priority-text"></label></div>
+			</div>
+			<div class="form-group">
+				<div class="col-xs-2"></div>
+				<div class="col-xs-8">
+					<label><input id="ap-dialog-auto" type="checkbox">&nbsp;<span class="glyphicon glyphicon-link" aria-hidden="true"></span>&nbsp;Auto&nbsp;Connect</label><br/>
+					<label><input id="ap-dialog-ota"  type="checkbox">&nbsp;<span class="glyphicon glyphicon-cog"  aria-hidden="true"></span>&nbsp;OTA&nbsp;Updates</label><br/>
+				</div>
+			</div>
+			<div class="form-group">
+				<div class="col-xs-2"><label for="ap-dialog-fx">FX</label></div>
+				<div class="col-xs-8" ><select id="ap-dialog-fx" class="form-control input-sm">
+				<option value="none">none</option>
+				<option value="ignore">ignore</option>
+				<option value="track">track</option>
+				<option value="happy">happy</option>
+				<option value="angry">angry</option>
 			</select></div>
-		  </div> 	
-		  <div class="form-group">
-		    <div class="col-xs-2"><label for="ap-dialog-color">Color</label></div>
-		    <div class="col-xs-8"><input id="ap-dialog-color" class="form-control" type="color" value="#000000" /></div>
-	      </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="action-ap-connect" data-dismiss="modal">Connect</button>
-        <button type="button" class="btn btn-default" id="action-ap-save" data-dismiss="modal">Save</button>
-        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
+			</div> 	
+			<div class="form-group">
+				<div class="col-xs-2"><label for="ap-dialog-color">Color</label></div>
+				<div class="col-xs-8"><input id="ap-dialog-color" class="form-control" type="color" value="#000000" /></div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-primary" id="action-ap-connect" data-dismiss="modal">Connect</button>
+				<button type="button" class="btn btn-default" id="action-ap-save" data-dismiss="modal">Save</button>
+				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
 </div>
 <!-- ajax / json dialog -->
 <div id="json-dialog" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 id="json-dialog-title" class="modal-title"></h4>
-      </div>
-      <div id="json-dialog-content" class="modal-body"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 id="json-dialog-title" class="modal-title"></h4>
+			</div>
+			<div id="json-dialog-content" class="modal-body"></div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
 </div>
 <!-- Confirm log delete -->
 <div id="clearlog-dialog" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header bg-warning">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">Confirm Delete</h4>
-      </div>
-      <div class="modal-body">
-      	<p>Please confirm you wish to delete all the log files.</p> 
-      </div>
-      <div class="modal-footer">
-        <button id="action-storage-clear" type="button" class="btn btn-warning" data-dismiss="modal">Delete</button>
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-      </div>
-    </div>
-  </div>
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header bg-warning">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 class="modal-title">Confirm Delete</h4>
+			</div>
+			<div class="modal-body">
+				<p>Please confirm you wish to delete all the log files.</p> 
+			</div>
+			<div class="modal-footer">
+				<button id="action-storage-clear" type="button" class="btn btn-warning" data-dismiss="modal">Delete</button>
+				<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Pose editor dialog -->
+<div id="pd" class="modal fade" tabindex="-1" role="dialog">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 class="modal-title">Pose Editor
+					<select id="pose-selector" class="form-control input-sm"></select>
+				</h4>
+			</div>
+			<div id="pose-editor" class="modal-body">
+			</div>
+			<div class="modal-footer">
+				<button id="action-pose-save" type="button" class="btn btn-primary">Save</button>
+				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
 </div>
 
 <!-- OTA update progress -->
 <div id="ota-dialog" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">OTA Update</h4>
-      </div>
-      <div class="modal-body">
-      	<p>An "Over The Air" update is in progress. Once complete, please wait for the device to restart, and then reload this page.</p> 
-      	<div class="progress">
-		  <div id="ota-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
-		    0%
-		  </div>
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+				<h4 class="modal-title">OTA Update</h4>
+			</div>
+			<div class="modal-body">
+				<p>An "Over The Air" update is in progress. Once complete, please wait for the device to restart, and then reload this page.</p> 
+				<div class="progress">
+			<div id="ota-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+				0%
+			</div>
 		</div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
 </div>
 <!-- main ui form -->
 <div class="container">
 	<div id="section-eye"><div class="well well-sm" style="background:#222;" ></div></div>
 	<div id="section-scan" class="ui-section"><div class="well well-sm" style="overflow-y:scroll; background:#222;" >
-  		<div id="scan-list" class="container-fluid"></div>
-  		<div id="scan-status"></div>
+			<div id="scan-list" class="container-fluid"></div>
+			<div id="scan-status"></div>
 	</div></div>
 	<div id="section-servo" class="ui-section"><div class="well well-sm" style="background-color:#ccc;">
 		<div class="row">
-		  <table><tbody>
-		  	<tr>
-			  	<td></td>
-			  	<td width="60%" class="text-center">Servo Position</td>
-			  	<td>&nbsp;</td>
-		  		<td width="30%" class="text-center">Speed</td>
-		  	</tr><tr>
-			  	<td>1:</td>
-			  	<td width="60%"><input id="servo.1" type="range" min="-90" max="90" value="0" /></td>
-			  	<td>&nbsp;</td>
-		  		<td width="30%"><input id="servo.speed.1" type="range" min="1" max="300" value="30" /></td>
-		  	</tr><tr>
-			  	<td>2:</td>
-		  		<td width="60%"><input id="servo.2" type="range" min="-90" max="90" value="0" /></td>
-			  	<td>&nbsp;</td>
-		  		<td width="30%"><input id="servo.speed.2" type="range" min="1" max="300" value="30" /></td>
-		  	</tr>
-		  </tbody></table>
+			<table><tbody>
+				<tr>
+					<td></td>
+					<td width="60%" class="text-center">Servo Position</td>
+					<td>&nbsp;</td>
+					<td width="30%" class="text-center">Speed</td>
+				</tr><tr>
+					<td>1:</td>
+					<td width="60%"><input id="servo.1" type="range" min="-90" max="90" value="0" /></td>
+					<td>&nbsp;</td>
+					<td width="30%"><input id="servo.speed.1" type="range" min="1" max="300" value="30" /></td>
+				</tr><tr>
+					<td>2:</td>
+					<td width="60%"><input id="servo.2" type="range" min="-90" max="90" value="0" /></td>
+					<td>&nbsp;</td>
+					<td width="30%"><input id="servo.speed.2" type="range" min="1" max="300" value="30" /></td>
+				</tr>
+			</tbody></table>
 		</div>
 		<div class="row">
 			<br/>
 		</div>
 		<div class="row">
-			<div class="col-xs-3 text-right"><label>Pose</label></div>
-			<div  class="col-xs-8">
-				<button class="action-pose btn btn-default btn-sm" type="button">startup</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">ready</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">online</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">offline</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">scan</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">angry</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">happy</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">detect</button>
-				<button class="action-pose btn btn-default btn-sm" type="button">idle</button>
-			</div>
+			<div class="col-xs-2 text-right"><label>Pose</label></div>
+			<div id="pose-list" class="col-xs-10"></div>
+		</div>
+		<br/>
+		<div class="row">
+			<div class="col-xs-2 text-right"><label></label></div>
+			<div class="col-xs-8"><button id="action-pose-editor" class="btn btn-default btn-sm btn-block" type="button">Pose Editor</button></div>
 		</div>
 	</div></div>
 	<div id="section-status" class="ui-section"><div class="well well-sm container-fluid" style="background-color:#ccc;">
 		<div class="row">
 			<div class="col-xs-2 text-right ui-progress-icon"><span class="glyphicon glyphicon-flash" aria-hidden="true"></span></div>
 			<div class="col-xs-8 progress ui-progress">
-			  <div id="voltage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
-			    0%
-			  </div>
+				<div id="voltage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+					0%
+				</div>
 			</div>
 		</div>
 		<div class="row">
 			<div class="col-xs-2 text-right ui-progress-icon"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span></div>
 			<div class="col-xs-8 progress ui-progress">
-			  <div id="storage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
-			    0%
-			  </div>
+				<div id="storage-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+					0%
+				</div>
 			</div>
 		</div>
 		<div class="row">
 			<!-- <div class="col-xs-3"><label>RSSI</label></div> -->
 			<div class="col-xs-2 text-right  ui-progress-icon"><span class="glyphicon glyphicon-signal" aria-hidden="true"></span></div>
 			<div class="col-xs-8 progress ui-progress">
-			  <div id="signal-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
-			    0%
-			  </div>
+				<div id="signal-progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width:0%;">
+					0%
+				</div>
 			</div>
 		</div>
 		<div class="row">
@@ -977,8 +1272,8 @@
 		<div class="row">
 			<div class="col-md-3"><label>Scan</label></div>
 			<div class="col-md-4"><select id="scan-mode" class="form-control input-sm">
-			  <option value="stop">off</option>
-			  <option value="start">active</option>
+				<option value="stop">off</option>
+				<option value="start">active</option>
 			</select></div>
 			<div  class="col-md-4">			
 				<button id="action-wifi-reconnect" class="btn btn-default btn-sm btn-block" type="button">Reconnect</button>
@@ -987,8 +1282,8 @@
 		<div class="row">
 			<div class="col-md-3"><label><a target="_blank" href="log.txt">Logs</a></label></div>
 			<div class="col-md-4"><select id="logging-mode" class="form-control input-sm">
-			  <option value="stop">off</option>
-			  <option value="start">active</option>
+				<option value="stop">off</option>
+				<option value="start">active</option>
 			</select></div>
 			<div  class="col-md-4">			
 				<button class="btn btn-default btn-sm btn-block" type="button" data-toggle="modal" data-target="#clearlog-dialog">Clear Logs</button>
@@ -997,9 +1292,9 @@
 		<div class="row">
 			<div class="col-md-3"><label>Servos</label></div>
 			<div class="col-md-4"><select id="servo-mode" class="form-control input-sm">
-			  <option value="off">off</option>
-			  <option value="on">on</option>
-			  <option value="auto">auto</option>
+				<option value="off">off</option>
+				<option value="on">on</option>
+				<option value="auto">auto</option>
 			</select></div>
 		</div>
 		<br/>
@@ -1021,13 +1316,10 @@
 		</div>
 	</div></div>
 	<div id="section-console" class="ui-section"><div id="messages-scroll" class="well well-sm" style="overflow-y:scroll;">
-	  <div style="height:100%"></div>
-	  <ul id="messages-list" class="list-group" style="margin-bottom:0.25em;"></ul>
-	  <div id="messages-input class="text-middle"><label>$</label><input type="text" value="" id="message-send"  class="text-left" style="width:95%; line-height:1.2em; "></div>
+		<div style="height:100%"></div>
+		<ul id="messages-list" class="list-group" style="margin-bottom:0.25em;"></ul>
+		<div id="messages-input class="text-middle"><label>$</label><input type="text" value="" id="message-send"  class="text-left" style="width:95%; line-height:1.2em; "></div>
 	</div></div>
-	<!--  <div id="debug" class="container"><div class="well">
-		
-	</div></div>  -->
 </div>
 <script>
 	// test the scan ui
@@ -1035,7 +1327,7 @@
 		// are we local
 		if(window.location.href.indexOf('file:')>=0) {
 			scan_start({"start":2875624}) ;
-			scan_station({"ssid":"unorthodox", "bssid":"00:0C:42:05:14:9C", "encrypt":"tkip", "channel":9, "rssi":-49, "ap":true, "otp":true, "priority":7, "fx":"good" });
+			scan_station({"ssid":"unorthodox", "bssid":"00:0C:42:05:14:9C", "encrypt":"tkip", "channel":9, "rssi":-49, "ap":true, "auto":true, "ota":true, "priority":7, "fx":"track", color:"#000080" });
 			scan_station({"ssid":"ESP-01", "bssid":"62:01:94:06:C6:2A", "encrypt":"none", "channel":9, "rssi":-38,  "priority":4, "auto":"true" });
 			scan_station({"ssid":"Craig", "bssid":"A0:63:91:C6:1C:CE", "encrypt":"ccmp", "channel":11, "rssi":-94 });
 			scan_complete({"complete":2877766});
@@ -1043,56 +1335,57 @@
 			// do the ui prep
 			// 
 			ui_status({"ui": {
-			    "status": {
-			   	  "vcc":3140,
-			   	  "rssi":-54,
-			   	  "color":"#FFFF00",
-			      "wifi": {
-			        "state": "started",
-			        "hostname": "Agomotto",
-			        "connected_ssid": "unorthodox",
-			        "ap_ip": "192.168.4.1",
-			        "ap_mac": "5e:cf:7f:23:db:56",
-			        "local_ip": "10.1.1.18",
-			        "local_mac": "5c:cf:7f:23:db:56"
-			      },
-			      "scan": {
-			        "state": "stopped"
-			      },
-			      "fx": {
-			        "servo_start": "auto"
-			      },
-			      "servos_state": "auto",
-			      "servos": [
-			        {
-			          "state": 0,
-			          "position": 1000,
-			          "target": 1000,
-			          "speed": 4,
-			          "timeout": 0
-			        },
-			        {
-			          "state": 0,
-			          "position": 1000,
-			          "target": 1000,
-			          "speed": 4,
-			          "timeout": 0
-			        }
-			      ],
-			      "log": {
-			        "state": "stopped",
-			        "url": "/log.txt"
-			      },
-			      "storage": {
-			        "total": 2949250,
-			        "used": 538395,
-			        "block_size": 8192,
-			        "page_size": 256,
-			        "max_open_files": 5,
-			        "max_path_length": 32
-			      }
-			  },
-			  "ok": true
+					"status": {
+				 		"vcc":3140,
+				 		"rssi":-54,
+				 		"color":"#FFFF00",
+						"wifi": {
+							"state": "started",
+							"hostname": "Agomotto",
+							"connected_ssid": "unorthodox",
+							"ap_ip": "192.168.4.1",
+							"ap_mac": "5e:cf:7f:23:db:56",
+							"local_ip": "10.1.1.18",
+							"local_mac": "5c:cf:7f:23:db:56"
+						},
+						"scan": {
+							"state": "stopped"
+						},
+						"fx": {
+							"servo_start": "auto"
+						},
+						"servos_state": "auto",
+						"servos": [
+							{
+								"state": 0,
+								"position": 1000,
+								"target": 1000,
+								"speed": 4,
+								"timeout": 0
+							},
+							{
+								"state": 0,
+								"position": 1000,
+								"target": 1000,
+								"speed": 4,
+								"timeout": 0
+							}
+						],
+						"poses":["angry","detect","example","happy","idle","offline","online","ota","ready","scan","startup"],
+						"log": {
+							"state": "stopped",
+							"url": "/log.txt"
+						},
+						"storage": {
+							"total": 2949250,
+							"used": 538395,
+							"block_size": 8192,
+							"page_size": 256,
+							"max_open_files": 5,
+							"max_path_length": 32
+						}
+				},
+				"ok": true
 			}});
 	
 		}	

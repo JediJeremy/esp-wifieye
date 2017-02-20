@@ -403,12 +403,24 @@ void scan_report_complete() {
   } else if(ap_happy>0) {
     fx_pose("happy");
   } else if(ap_count>0) {
-    // start with the generic detection pose
-    fx_pose("detect");
     // check for tracking target
     if(scan_tracking_index != -1) { 
       // transition to the tracking color
-      if(scan_tracking_color) led_animate(0, scan_tracking_color, 50);
+      fx_pose("track");      
+      if(scan_tracking_color) {
+        // we assume the pose has started a color transition
+        RGBPose * pose = &color_pose[0];
+        if(pose->animate) {
+          // replace the default color with the AP-specific one
+          pose->target = scan_tracking_color;
+        } else {
+          // change color to the AP
+          led_animate(0, scan_tracking_color, 50);      
+        }
+      }
+    } else {
+      // start with the generic detection pose
+      fx_pose("detect");      
     }
   } else {
     fx_pose("idle");
@@ -608,7 +620,6 @@ void wifi_setup(){
   sta_disconnect_handler = WiFi.onStationModeDisconnected(wifi_disconnected);
 
   // set hostname
-  // WiFi.hostname(local_hostname.c_str());
   WiFi.hostname(local_hostname);
 
   // start local access point
@@ -646,7 +657,7 @@ int ota_last_progress = -1;
 void ota_setup(){
   // echo OTA events to the websocket clients
   ArduinoOTA.onStart([]() { 
-    fx_pose("ota");
+    // fx_pose("ota");
     events.send("{\"ota\":{\"state\":\"start\"}}", "ota"); 
   });
   ArduinoOTA.onEnd([]() { 
@@ -726,7 +737,7 @@ void wifi_loop(){
         case WIFI_STATE_IDLE:
           // I'm not blue
           // leds[0] = CRGB::Orange; FastLED.show();
-          fx_pose(String("offline"));
+          fx_pose("offline");
           // disconnect, then fall through
           WiFi.disconnect(false);
           delay(1000);
@@ -747,7 +758,7 @@ void wifi_loop(){
         case WIFI_STATE_IDLE:
           // I'm not blue
           // leds[0] = CRGB::Orange; FastLED.show();
-          fx_pose(String("offline"));
+          fx_pose("offline");
           // disconnect
           WiFi.disconnect(false);
           delay(1000);

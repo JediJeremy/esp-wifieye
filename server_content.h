@@ -9,12 +9,38 @@ void jsr_property_str(AsyncResponseStream *response, char[] pname, char[] pvalue
 }
 */
 
+// write a list of the directory contents (as a json array) to the response stream
+void request_directory_jsonarray(AsyncResponseStream * response, char * path, char * extension = NULL, boolean prefix=false, boolean postfix=false) {
+  char name_json[64]; // json name buffer
+  boolean first = true;
+  response->print('[');
+  Dir dir = SPIFFS.openDir(path);
+  int prefix_skip  = (prefix) ? 0 : strlen(path);
+  int postfix_skip = (postfix && (extension!=NULL)) ? 0 : strlen(extension);
+  while (dir.next()) {
+    String filename = dir.fileName();
+    // we likely need to shorten this full path filename and filter the results
+    if( (extension == NULL) || filename.endsWith(extension) ) {
+      // this entry is acceptable. shorten the name
+      String name = filename.substring( prefix_skip, filename.length() - postfix_skip );
+      string_to_json(name_json, 64, name);
+      response->print(first ? "\"" : ",\"");    
+      response->print(name_json);
+      response->print('\"');
+      first = false;
+    }    
+  }
+  response->print(']');
+}
+
 void server_setup() {
   // serve the SPIFFSEditor
   server.addHandler(new SPIFFSEditor( htaccess_username, htaccess_password ));
 
   // serve static pages from www root
   server.serveStatic("/", SPIFFS, "/www/").setDefaultFile("index.htm");
+  // also give out the pose files
+  server.serveStatic("/pose/", SPIFFS, "/pose/");
  
   server.on("/adc", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", String( analogRead(A0) ));
@@ -300,7 +326,11 @@ void server_setup() {
       }
     }
     response->print("\t],\n");
-    //
+    // and the list of poses
+    response->print("\t\"poses\":");
+    request_directory_jsonarray(response,"/pose/",".json",false,false);
+    response->print(",\n");
+    // logging
     response->print("\t\"log\":{\n");
     // response->printf("\t\t\"state\":%d,\n",logging_state);
     response->printf("\t\t\"state\":\"%s\",\n",logging_state_name(logging_state));
@@ -318,7 +348,7 @@ void server_setup() {
     response->printf("\t\t\"max_path_length\":%d\n",fs_info.maxPathLength);      
     response->print("\t},\n");
     // vcc
-    response->printf("\t\"vcc\":%d\n",ESP.getVcc());
+    response->printf("\t\"vcc\":%d\n",ESP.getVcc());    
     // end block with an OK code
     response->print("}},\"ok\":true}");
     // send the response
