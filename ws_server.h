@@ -61,7 +61,6 @@ void log_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonObj
   } 
 }
 
-
 String wifi_message_password(JsonObject& message, String ssid, String bssid, boolean has_bssid) {
   // were we given a password, or are we expected to search for it?    
   if(message.containsKey("password")) {
@@ -72,10 +71,6 @@ String wifi_message_password(JsonObject& message, String ssid, String bssid, boo
   return wifi_lookup_password(ssid, bssid, has_bssid);
 }
 
-
-// {"wifi":{"mode":"hostname"}}
-// {"wifi":{"mode":"htaccess"}}
-// {"wifi":{"mode":"ap"}}
 void wifi_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonObject& message) {
   String m_mode = message["mode"];
   if(m_mode == "connect") {
@@ -96,22 +91,7 @@ void wifi_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonOb
     memcpy(apconnect_bssid,bssid,6);
     // and initiate a reconnect in the main loop
     wifi_state_change = WIFI_STATE_RECONNECT;
-    // send back some info for the user
-    /*
-    if(has_bssid) {
-      uint8_t * mac = apconnect_bssid;
-      // name + bssid connection
-      client->printf("{\"wifi\":{\"event\":\"connect\",\"ssid\":\"%s\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"password\":\"%s\"}}", 
-        apconnect_ssid.c_str(), 
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-        apconnect_password.c_str() 
-      );
-    } else {
-      // name-only connection
-      client->printf("{\"wifi\":{\"event\":\"connect\",\"ssid\":\"%s\",\"password\":\"%s\"}}", apconnect_ssid.c_str(), apconnect_password.c_str() );
-      // WiFi.begin( m_ssid, password );
-    }
-    */
+    //
   } else if(m_mode == "save") {
     String m_ssid = message["ssid"];
     String m_bssid = message["bssid"];
@@ -153,20 +133,14 @@ void wifi_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonOb
       // client->printf("{\"wifi\":{\"event\":\"save\",\"id\":\"%s\",\"password\":\"%s\"}}", m_ssid.c_str(), password.c_str() );
     }
   } else if(m_mode == "disconnect") {
-    // WiFi.disconnect(false);
-    // events.send("{\"wifi\":{\"event\":\"disconnect\"}}","wifi");
     // and initiate a reconnect in the main loop
     wifi_state_change = WIFI_STATE_STOP;
   } else if(m_mode == "reconnect") {
-    //WiFi.disconnect(false);
-    //events.send("{\"wifi\":{\"event\":\"disconnect\"}}","wifi");
     // and initiate a reconnect in the main loop
     wifi_state_change = WIFI_STATE_SEARCH;
   } else if(m_mode == "test") {
     events.send("{\"wifi\":{\"event\":\"test\"}}","wifi");
   } else if(m_mode == "hostname") {
-    // read the file into the global buffer (again)
-    // load_hostname(); 
     // reply with the contents
     client->printf("{\"local\":{\"hostname\":\"%s\"}}", local_hostname.c_str());
   } else if(m_mode == "htaccess") {
@@ -251,16 +225,14 @@ void config_message(AsyncWebSocket * server, AsyncWebSocketClient * client, Json
   }
 }
 
-
 void fx_message(AsyncWebSocket * server, AsyncWebSocketClient * client, JsonObject& message) {
   if(message["pose"].is<const char *>()) {
-    fx_pose(message["pose"]);
+    fx_pose(message["pose"],true);
+    servos_state_change = SERVO_STATE_ON;
   }
 }
 
 void accept_json_message(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len) {
-  // client->text("{\"ok\":\"got JSON object\"}");
-  
   // try to parse the data
   StaticJsonBuffer<256> jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject((char *)data, len);
@@ -326,9 +298,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
         }
         //Serial.printf("ws[%s][%u] frame[%u] start[%llu]\n", server->url(), client->id(), info->num, info->len);
       }
-
       //Serial.printf("ws[%s][%u] frame[%u] %s[%llu - %llu]: ", server->url(), client->id(), info->num, (info->message_opcode == WS_TEXT)?"text":"binary", info->index, info->index + len);
-
       if(info->opcode == WS_TEXT){
         for(size_t i=0; i < info->len; i++) {
           msg += (char) data[i];
@@ -341,7 +311,6 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
         }
       }
       //Serial.printf("%s\n",msg.c_str());
-
       if((info->index + len) == info->len){
         //Serial.printf("ws[%s][%u] frame[%u] end[%llu]\n", server->url(), client->id(), info->num, info->len);
         if(info->final){

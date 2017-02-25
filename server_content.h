@@ -97,71 +97,6 @@ void server_setup() {
     request->send(response);
   });
 
-  /*
-  server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *request){
-    switch(scan_state) {
-      case SCAN_STATE_OFF:
-        // schedule the network scan
-        scan_state_change = SCAN_STATE_START;
-        //if(servos_state==0) servos_state = 1;
-        request->send(200, "text/plain", "START" );
-        break;
-      case SCAN_STATE_START:
-        request->send(200, "text/plain", "STARTING" );
-        break;
-      case SCAN_STATE_ACTIVE:
-      case SCAN_STATE_IDLE:
-        int n = scan_count;
-        // compile the response
-        AsyncResponseStream *response = request->beginResponseStream("application/json");
-        // response->addHeader("Server","ESP Async Web Server");
-        // wifi scan report
-        response->print("{\"wifi\":{\"scan\":{\n");
-        // count of list entries
-        response->print("\"count\":");
-        response->print(n);
-        response->print("\n");
-        // scan list
-        response->print("\t\"list\":[\n");
-        for (int i = 0; i < n; ++i) {
-          // scan list entry object
-          response->print("\t\t{ ");
-          // response->print("\"index\":");
-          // response->print(i);
-          response->print("\"ssid\":\"");
-          response->print(scan_ssid[i]);
-          response->print("\", \"bssid\":\"");
-          response->print(scan_bssid[i]);
-          response->print("\", \"encrypt\":\"");
-          switch(WiFi.encryptionType(i)) {
-            case ENC_TYPE_NONE:  response->print("none"); break;
-            case ENC_TYPE_WEP:   response->print("wep"); break;
-            case ENC_TYPE_TKIP:  response->print("tkip"); break;
-            case ENC_TYPE_CCMP:  response->print("ccmp"); break;
-            case ENC_TYPE_AUTO:  response->print("auto"); break;
-          }
-          response->print("\", \"channel\":");
-          response->print(scan_channel[i]);
-          response->print(", \"rssi\":");
-          response->print(scan_rssi[i]);
-          // response->print(" }\n");
-          if((i+1) < n) {
-            response->print(" },\n");
-          } else {
-            response->print(" }\n");
-          }
-        }
-        // end list
-        response->print("\t]\n");
-        // end block with an OK code
-        response->print("}},\"ok\":true}");
-        // send the response
-        request->send(response);
-        break;
-    }
-  });
-  */
-
   server.on("/wifi/status", HTTP_GET, [](AsyncWebServerRequest *request){
     // compile the response
     AsyncResponseStream *response = request->beginResponseStream("application/json");
@@ -203,28 +138,6 @@ void server_setup() {
     request->send(response);
   });
 
-  /*
-  server.on("/wifi/powersave", HTTP_GET, [](AsyncWebServerRequest *request){
-    // compile the response
-    AsyncResponseStream *response = request->beginResponseStream("application/json");
-    // response->addHeader("Server","ESP Async Web Server");
-    // wifi scan report
-    response->print("{\"wifi\":{\"powersave\":{\n");
-    // end block with an OK code
-    response->print("}},\"ok\":true}");
-    // send the response
-    request->send(response);
-    if(wifi_state == 2) {
-      // switch to station-only mode
-      WiFi.mode(WIFI_STA);
-      // enable auto modem sleep?
-      WiFi.setSleepMode(WIFI_MODEM_SLEEP);
-      // we now have the ability to sleep
-      wifi_state == 3;
-    }
-  });
-  */
-  
   server.on("/system/status", HTTP_GET, [](AsyncWebServerRequest *request){
     // compile the response
     AsyncResponseStream *response = request->beginResponseStream("application/json");
@@ -406,8 +319,6 @@ void server_setup() {
     request->send(response);
   });
 
-  
-
   server.onNotFound([](AsyncWebServerRequest *request){
     Serial.printf("NOT_FOUND: ");
     if(request->method() == HTTP_GET)
@@ -427,19 +338,16 @@ void server_setup() {
     else
       Serial.printf("UNKNOWN");
     Serial.printf(" http://%s%s\n", request->host().c_str(), request->url().c_str());
-
     if(request->contentLength()){
       Serial.printf("_CONTENT_TYPE: %s\n", request->contentType().c_str());
       Serial.printf("_CONTENT_LENGTH: %u\n", request->contentLength());
     }
-
     int headers = request->headers();
     int i;
     for(i=0;i<headers;i++){
       AsyncWebHeader* h = request->getHeader(i);
       Serial.printf("_HEADER[%s]: %s\n", h->name().c_str(), h->value().c_str());
     }
-
     int params = request->params();
     for(i=0;i<params;i++){
       AsyncWebParameter* p = request->getParam(i);
@@ -451,7 +359,6 @@ void server_setup() {
         Serial.printf("_GET[%s]: %s\n", p->name().c_str(), p->value().c_str());
       }
     }
-
     request->send(404);
   });
   server.onFileUpload([](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
@@ -469,3 +376,5 @@ void server_setup() {
       Serial.printf("BodyEnd: %u\n", total);
   });
 }
+
+

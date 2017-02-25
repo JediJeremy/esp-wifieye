@@ -1,9 +1,3 @@
-// fx system config
-String fx_servo_start = String("off");
-String fx_color_start = String("#0000FF");
-String fx_color_connect = String("#FFFF00");
-String fx_color_active = String("#00FF00");
-String fx_color_idle = String("#000000");
 
 // fastled library includes
 #define FASTLED_ESP8266_RAW_PIN_ORDER
@@ -14,7 +8,7 @@ String fx_color_idle = String("#000000");
 // How many leds are in the strip?
 #define LED_COUNT 1
 
-// Data pin that led data will be written out over
+// Data pin that neopixel data will be written out over
 #define DATA_PIN 2
 //#define DATA_PIN 16
 
@@ -36,18 +30,11 @@ RGBPose color_pose[LED_COUNT];
 // and also for the noise parameters
 RGBPose noise_pose[LED_COUNT];
 
-/*
-// the pose system has a target color and animation time information for each led
-boolean led_pose_animate[LED_COUNT];
-CRGB    led_pose_begin[LED_COUNT];
-CRGB    led_pose_target[LED_COUNT];
-CRGB    led_pose_color[LED_COUNT];
-int     led_pose_rate[LED_COUNT];
-int     led_pose_time[LED_COUNT];
-*/
-
 // How many leds are in the strip?
 #define SERVO_COUNT 2
+
+// fx system config
+String fx_servo_start = String("off"); // default startup servo state (overriden by config file if found)
 
 // the pose system has a target and 'twitch' timer
 int     servo_twitch_rate = 0;
@@ -176,12 +163,12 @@ float clamp_f(float v, float a, float b) {
 }
 
 int mix_i(int v, int a, int b, int ma, int mb) {
-  float m1 = (clamp_f(v,a,b)) - a / (b-a);
+  float m1 = (clamp_f(v,a,b) - a) / (b-a);
   return (mb - ma) * m1 + ma;
 }
 
 float mix_f(float v, float a, float b, float ma, float mb) {
-  float m1 = (clamp_f(v,a,b)) - a / (b-a);
+  float m1 = (clamp_f(v,a,b) - a) / (b-a);
   return (mb - ma) * m1 + ma;
 }
 
@@ -244,16 +231,19 @@ boolean load_servo_config(int index, ServoConfig &cfg) {
 //
 void save_servo_config(int index, ServoConfig &cfg) {
   // open the file
-  String filename = String("/etc/servo") + String(index);
+  String filename = String("/etc/servo") + String(index) + String(".json");
   File file = SPIFFS.open(filename.c_str(), "w");
   if(!file) {
     // could not open
     events.send("{\"error\":\"could not write\", \"file\":\"/etc/servo\"}");
   } else {
-    StaticJsonBuffer<256> json;
+    StaticJsonBuffer<512> json;
     JsonObject& root = json.createObject();
     root["pin"] = cfg.pin;
     root["min_micros"] = cfg.min_micros;
+    root["max_micros"] = cfg.max_micros;
+    root["zero_micros"] = cfg.zero_micros;
+    root["unit_scaling"] = cfg.unit_scaling;
     root.printTo(file);
     file.close();
     events.send("{\"message\":\"saved /etc/servo\"}");  
@@ -634,7 +624,8 @@ void fx_pose(String name, boolean do_servos = false) {
     }
   }, [](){
     // failure.
-    //events.send("{\"error\":\"could not load config /etc/htaccess \"}");
+    //events.send("{\"error\":\"could not load pose\"}");
+    // silently ignore. no file means no change.
   });
 }
 

@@ -414,6 +414,9 @@
 				},
 				success: pose_editor
 			})
+		} else {
+			// enable all the primary buttons
+			$('#pd .btn-primary').attr('disabled',false);
 		}
 	}
 	
@@ -706,14 +709,35 @@
 		startSocket();
 		startEvents();
 		// attach handlers
-		$('#servo\\.1').on('input', function(e,v) {
-			var v = $('#servo\\.1').val();
-			var spd = $('#servo\\.speed\\.1').val();
-			var m = {"servo":{}};
-			m["servo"]["1"] = {"pos":v, "speed":spd || 1000}
-			// 
-			ws.send(JSON.stringify(m));
-		})
+		for(var index=1; index<=SERVO_COUNT; index++) (function(index){
+			// exponentially turn speed factor into speed in degrees/s
+			function get_speed() {
+				var spd = $('#servo\\.speed\\.'+index).val();
+				var v = Math.round( Math.pow(spd / 100, 2) * 600 );
+				return v;
+			}
+			function update_speed(v) {
+				$('#servo\\.slabel\\.'+index).text(""+v+"°");
+			}
+			// set initial speed text
+			update_speed(get_speed());
+			// connect event listeners
+			$('#servo\\.'+index).on('input', function(e,v) {
+				var v = $('#servo\\.'+index).val();
+				var spd = get_speed();
+				$('#servo\\.plabel\\.'+index).text(""+v+"°");
+				update_speed( spd );
+				// compose and send remote command
+				var m = {"servo":{}};
+				m["servo"][+index] = {"pos":v, "speed":spd || 600}
+				// send over websockets
+				ws.send(JSON.stringify(m));
+			})	
+			$('#servo\\.speed\\.'+index).on('input', function(e,v) {
+				update_speed( get_speed() );
+			})	
+		})(index);
+		/*
 		// 
 		$('#servo\\.2').on('input', function(e,v) {
 			var v = $('#servo\\.2').val();
@@ -723,6 +747,7 @@
 			// 
 			ws.send(JSON.stringify(m));
 		})
+		*/
 		$('#scan-mode').on('change', function(e,v) {
 			var v = $(e.target).val();
 			var m = {"scan":{"mode":v}};
@@ -835,7 +860,7 @@
 			}}));
 		});
 		// servo config
-		for(var index=1; index<=2; index++) (function(index) {
+		for(var index=1; index<=SERVO_COUNT; index++) (function(index) {
 			// 
 			$('#action-config-servo'+index+'-save').on('click', function() {
 				// build a servo config message
@@ -949,7 +974,7 @@
 					</a></h4></div>
 					<div id="cdc3" class="collapse" role="tabpanel" aria-labelledby="cs3"><div class="card-block">
 						<div class="modal-body form-horizontal">
-							<p class="help-block">Web Authentication credentials. (Only applies to the <a href="/edit" target="_blank">File Editor</a> and is obviously not very secure. Demo only.)</p>
+							<p class="help-block">Web Authentication credentials. (Only applies to the Pose Editor and <a href="/edit" target="_blank">File Editor</a> and is obviously not very secure. Demo only.)</p>
 							<div class="form-group form-group-sm">
 								<div class="col-md-2"><label for="cd-htname">name</label></div>
 								<div class="col-md-8"><input id="cd-htname" class="form-control"/></div>
@@ -1203,6 +1228,26 @@
 	</div></div>
 	<div id="section-servo" class="ui-section"><div class="well well-sm" style="background-color:#ccc;">
 		<div class="row">
+			<div class="col-xs-12"><label>Servo Position & Speed</label></div>
+		</div>
+		<div class="row">
+			<div class="col-xs-12"><input id="servo.1" type="range" min="-90" max="90" value="0" /></div>
+		</div>
+		<div class="row">
+			<div class="col-xs-2 text-right"><label id="servo.plabel.1">0°</label></div>
+			<div class="col-xs-4"><label id="servo.slabel.1">0°</label>/s</div>
+			<div class="col-xs-6"><input id="servo.speed.1" type="range" min="1" max="100" value="29" /></div>
+		</div>
+		<div class="row">
+			<div class="col-xs-12"><input id="servo.2" type="range" min="-90" max="90" value="0" /></div>
+		</div>
+		<div class="row">
+			<div class="col-xs-2 text-right"><label id="servo.plabel.2">0°</label></div>
+			<div class="col-xs-4"><label id="servo.slabel.2">0°</label>/s</div>
+			<div class="col-xs-6"><input id="servo.speed.2" type="range" min="1" max="100" value="29" /></div>
+		</div>
+		<!-- 
+		<div class="row">
 			<table><tbody>
 				<tr>
 					<td></td>
@@ -1222,11 +1267,12 @@
 				</tr>
 			</tbody></table>
 		</div>
+		 -->
 		<div class="row">
 			<br/>
 		</div>
 		<div class="row">
-			<div class="col-xs-2 text-right"><label>Pose</label></div>
+			<div class="col-xs-2"><label>Pose</label></div>
 			<div id="pose-list" class="col-xs-10"></div>
 		</div>
 		<br/>

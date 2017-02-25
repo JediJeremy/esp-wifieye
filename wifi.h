@@ -8,7 +8,10 @@ static boolean apconnect_has_ota = true;
 static uint8_t apconnect_bssid[6];
 static boolean apconnect_has_bssid = false;
 
-// connection skip list
+/* 
+ * connection skip list - access points we skip connecting to for a while 
+ * (usually because they denied an earlier connection request) 
+ */
 #define SKIP_LIST_COUNT 4
 static uint8_t skip_bssid[SKIP_LIST_COUNT * 6];
 static uint8_t skip_counter[SKIP_LIST_COUNT];
@@ -40,7 +43,6 @@ void skip_list_add(uint8_t * bssid, uint8_t set_counter = 50) {
   // and set the counter
   skip_counter[lowest] = set_counter;
 }
-
 
 boolean skip_list_contains(uint8_t * bssid) {
   // go through the skip list and check if the entry is already there
@@ -96,7 +98,6 @@ int wifi_state_change = WIFI_STATE_OFF;
 int ota_state = OTA_STATE_OFF;
 int ota_state_change = OTA_STATE_OFF;
 
-
 // scan state
 #define SCAN_STATE_OFF      0
 #define SCAN_STATE_START    1
@@ -127,7 +128,6 @@ int search_priority;
 int search_rssi;
 boolean search_ota;
 
-
 // scan logging state
 #define LOGGING_STATE_OFF     0
 #define LOGGING_STATE_START   1
@@ -146,10 +146,6 @@ const char * logging_state_name(int scan_state) {
 
 int logging_state = LOGGING_STATE_OFF;
 int logging_state_change = LOGGING_STATE_OFF;
-
-// File log_file;
-
-
 
 void logging_start() {
     logging_state = LOGGING_STATE_ACTIVE;
@@ -177,7 +173,6 @@ void logging_clear_all() {
   logging_storage();
 }
 
-
 int scan_report_index = 0;
 int scan_tracking_index = -1;
 int scan_tracking_rssi = -200;
@@ -187,7 +182,6 @@ int ap_count = 0;
 int ap_happy = 0;
 int ap_angry = 0;
 int ap_track = 0;
-
 
 // compose and send a scan start message
 void scan_start_event() {
@@ -394,7 +388,6 @@ void scan_report_event(int index) {
   if(x_fx == "angry") ap_angry++;
 }
 
-
 // compose and send a scan complete message
 void scan_report_complete() {
   // adopt a new pose based on the scan result
@@ -519,9 +512,7 @@ void station_disconnected(const WiFiEventSoftAPModeStationDisconnected& event) {
   const uint8 * m = event.mac;
   sprintf(p, "{\"wifi\":{\"event\":\"client_disconnect\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"aid\":\"%x\"}}", m[0], m[1], m[2], m[3], m[4], m[5], event.aid);
   events.send(p, "wifi");
-
 }
-
 
 void wifi_connected(const WiFiEventStationModeConnected& event) {
   // events.send("{\"wifi\":{\"event\":\"ap_connected\"}}","wifi");
@@ -549,7 +540,6 @@ void wifi_gotip(const WiFiEventStationModeGotIP& event) {
     gw[0], gw[1], gw[2], gw[3]
   );
   events.send(p, "wifi");
-
 }
 
 void wifi_disconnected(const WiFiEventStationModeDisconnected& event) {
@@ -565,9 +555,6 @@ void wifi_disconnected(const WiFiEventStationModeDisconnected& event) {
   );
   events.send(p, "wifi");
 }
-
-
-
 
 void wifi_reconnect() {
     wifi_state = WIFI_STATE_START;  
@@ -649,7 +636,6 @@ void wifi_setup(){
       if(apconnect_has_ota) { ota_state_change = OTA_STATE_START; }
     }
   }
-
 }
 
 int ota_last_progress = -1;
@@ -685,7 +671,6 @@ void ota_setup(){
   //ArduinoOTA.begin();
 }
 
-
 /*
 DNSServer dnsServer;
 
@@ -697,7 +682,6 @@ void setupDNS() {
   dnsServer.start(53, "*", ip);
 }
 */
-
 
 void wifi_loop(){
   int r;
@@ -728,7 +712,6 @@ void wifi_loop(){
   }
   // processed
   ota_state_change = OTA_STATE_OFF;
-  
   // manage the wifi system
   switch(wifi_state_change) {
     case WIFI_STATE_RECONNECT:
@@ -811,7 +794,6 @@ void wifi_loop(){
       break;
   }
 
- 
   // manage the logging system
   switch(logging_state_change) {
     case LOGGING_STATE_START: 
@@ -825,7 +807,6 @@ void wifi_loop(){
       }
       break;
   }
-
 
   // WiFi scanning
   switch(scan_state) {
@@ -871,7 +852,6 @@ void wifi_loop(){
       break;
     case SCAN_STATE_STOP: // scan shutdown
       scan_state = SCAN_STATE_OFF;
-      
   }
   
 }

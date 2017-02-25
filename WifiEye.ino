@@ -118,20 +118,25 @@ void setup(){
 void loop(){
   // Handle WiFi/OTA events first, just in case
   wifi_loop();
-  // do effects
+  // do light/servo effects
   fx_loop();
   
   // status broadcast state
   switch(status_state) {
     case 1: // emit status now
       status_state = 0;
+      int status_vcc = ESP.getVcc();
+      int status_rssi =  WiFi.RSSI();
       char cb[64];
       sprintf(cb,"{\"status\":{\"vcc\":%d,\"rssi\":%d,\"color\":\"#%02X%02X%02X\" }}",
-        ESP.getVcc(),
-        WiFi.RSSI(),
+        status_vcc,
+        status_rssi,
         leds[0][0], leds[0][1], leds[0][2]
       );
       events.send(cb,"status");
+      // add to the entropy pool
+      random16_add_entropy(status_rssi);
+      random16_add_entropy(status_vcc);
       break;
   }
 
