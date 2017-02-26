@@ -500,7 +500,7 @@ void wifi_event(WiFiEvent_t event) {
 
 void station_connected(const WiFiEventSoftAPModeStationConnected& event) {
   // events.send("{\"wifi\":{\"event\":\"ap_connected\"}}","wifi");
-  char p[64];
+  char p[128];
   const uint8 * m = event.mac;
   sprintf(p, "{\"wifi\":{\"event\":\"client_connect\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"aid\":\"%x\"}}", m[0], m[1], m[2], m[3], m[4], m[5], event.aid);
   events.send(p, "wifi");
@@ -508,10 +508,12 @@ void station_connected(const WiFiEventSoftAPModeStationConnected& event) {
 
 void station_disconnected(const WiFiEventSoftAPModeStationDisconnected& event) {
   //events.send("{\"wifi\":{\"event\":\"ap_disconnect\"}}","wifi");
-  char p[64];
+  
+  char p[128];
   const uint8 * m = event.mac;
   sprintf(p, "{\"wifi\":{\"event\":\"client_disconnect\",\"bssid\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"aid\":\"%x\"}}", m[0], m[1], m[2], m[3], m[4], m[5], event.aid);
   events.send(p, "wifi");
+  
 }
 
 void wifi_connected(const WiFiEventStationModeConnected& event) {

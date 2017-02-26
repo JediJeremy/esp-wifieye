@@ -233,10 +233,10 @@
 	
 	function scan_complete(scan) {
 		// keep a list of the old entries
-	 	var rm_list = $('#scan-status').children()        		
-		// copy all the scan information to the ui
 		var list = $('#scan-list');
- 		list.empty();
+	 	var rm_list = list.children();    		
+		$('#scan-status').empty();
+		// copy all the scan information to the ui
  		for(var i in scan_list) (function(i){
  			var e = scan_list[i];
  			var tr = $('<div class="scan-row row">');
