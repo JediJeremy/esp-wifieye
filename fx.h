@@ -1,12 +1,15 @@
+// How many leds are in the strip?
+#define LED_COUNT 1
+// How many servos are available?
+#define SERVO_COUNT 2
+
+// fx system config
+String fx_servo_start = String("off"); // default startup servo state (overriden by config file if found)
 
 // fastled library includes
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
 
-// neopixel setup
-
-// How many leds are in the strip?
-#define LED_COUNT 1
 
 // Data pin that neopixel data will be written out over
 #define DATA_PIN 2
@@ -30,11 +33,41 @@ RGBPose color_pose[LED_COUNT];
 // and also for the noise parameters
 RGBPose noise_pose[LED_COUNT];
 
-// How many leds are in the strip?
-#define SERVO_COUNT 2
 
-// fx system config
-String fx_servo_start = String("off"); // default startup servo state (overriden by config file if found)
+
+// utilities
+int clamp_i(int v, int a, int b) {
+  if(a<b) {
+    if(v<a) return a;
+    if(v>b) return b;
+  } else {
+    if(v>a) return a;
+    if(v<b) return b;    
+  }
+  return v;
+}
+
+float clamp_f(float v, float a, float b) {
+  if(a<b) {
+    if(v<a) return a;
+    if(v>b) return b;
+  } else {
+    if(v>a) return a;
+    if(v<b) return b;    
+  }
+  return v;
+}
+
+int mix_i(int v, int a, int b, int ma, int mb) {
+  float m1 = (clamp_f(v,a,b) - a) / (b-a);
+  return (mb - ma) * m1 + ma;
+}
+
+float mix_f(float v, float a, float b, float ma, float mb) {
+  float m1 = (clamp_f(v,a,b) - a) / (b-a);
+  return (mb - ma) * m1 + ma;
+}
+
 
 // the pose system has a target and 'twitch' timer
 int     servo_twitch_rate = 0;
@@ -54,7 +87,25 @@ float        pulse_gamma = 1.4;
 int          pulse_min = 64;
 int          pulse_max = 255;
 
+float        pulse_time = 0;
+float        pulse_rssi = 0;
+int          pulse_track = 0;
+
 int pulse_brightness() {
+  // base pulse time
+  float pulse_delay = pulse_time;
+  // check for tracking target
+  if(pulse_track != 0) { 
+    pulse_delay += (float)(100.0+pulse_track)/100.0 * pulse_rssi;
+  }
+  if(pulse_delay == 0) {
+    // after the current pulse ends, don't loop
+    pulse_loop = false;
+  } else {
+    // update the pulse speed
+    pulse_velocity = (float)pulse_limit / (pulse_delay * 100.0); // assume 20ms loops
+    pulse_loop = true;
+  }
   // are we pulsing the brightness?
   if( pulse_velocity != 0 ) {
     // update the pulse time
@@ -74,7 +125,9 @@ int pulse_brightness() {
     // turn that into a 'distance from zero' ramp
     float pulse_ramp = abs( (pulse_time - 0.5) * 2 );
     // apply the pulse gamma curve to the linear ramp, and interpolate the range
-    int pulse_bright = pulse_ramp * 255; // mix_f( pow(pulse_ramp, pulse_gamma), 0, 1, pulse_min, pulse_max);
+    // int pulse_bright = pulse_ramp * 255; 
+    int pulse_bright = mix_f( pow(pulse_ramp, pulse_gamma), 0, 1, pulse_min, pulse_max);
+    // int pulse_bright = mix_f( pulse_ramp, 0, 1, pulse_min, pulse_max);
     // use that to set the brightness
     return  pulse_bright;
   }
@@ -137,39 +190,6 @@ int string_servo_state(String state) {
   if(state == "on")   return SERVO_STATE_ON;
   if(state == "auto") return SERVO_STATE_AUTO;
   return SERVO_STATE_OFF;
-}
-
-// utilities
-int clamp_i(int v, int a, int b) {
-  if(a<b) {
-    if(v<a) return a;
-    if(v>b) return b;
-  } else {
-    if(v>a) return a;
-    if(v<b) return b;    
-  }
-  return v;
-}
-
-float clamp_f(float v, float a, float b) {
-  if(a<b) {
-    if(v<a) return a;
-    if(v>b) return b;
-  } else {
-    if(v>a) return a;
-    if(v<b) return b;    
-  }
-  return v;
-}
-
-int mix_i(int v, int a, int b, int ma, int mb) {
-  float m1 = (clamp_f(v,a,b) - a) / (b-a);
-  return (mb - ma) * m1 + ma;
-}
-
-float mix_f(float v, float a, float b, float ma, float mb) {
-  float m1 = (clamp_f(v,a,b) - a) / (b-a);
-  return (mb - ma) * m1 + ma;
 }
 
 
@@ -564,6 +584,22 @@ void fx_pose(String name, boolean do_servos = false) {
             */
           }
         }
+      }
+    }
+    // LED pulse parameters?
+    if(root["pulse"].is<JsonObject&>()) {
+      JsonObject& pulse = root["pulse"];
+      if(pulse.containsKey("m")) {
+        pulse_min = (int)pulse["m"];
+      }
+      if(pulse.containsKey("g")) {
+        pulse_gamma = (float)pulse["g"]; 
+      }
+      if(pulse.containsKey("t")) {
+        pulse_time = (float)pulse["t"]; 
+      }
+      if(pulse.containsKey("r")) {
+        pulse_rssi = (float)pulse["r"]; 
       }
     }
     // are we allowed to mess with the servos?

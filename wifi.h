@@ -399,7 +399,7 @@ void scan_report_complete() {
     // check for tracking target
     if(scan_tracking_index != -1) { 
       // transition to the tracking color
-      fx_pose("track");      
+      fx_pose("track");
       if(scan_tracking_color) {
         // we assume the pose has started a color transition
         RGBPose * pose = &color_pose[0];
@@ -418,15 +418,12 @@ void scan_report_complete() {
   } else {
     fx_pose("idle");
   }
-  // check for tracking target
-  if(scan_tracking_index != -1) { 
-    // continue to pulse the LED brightness
-    pulse_velocity = 32+(100+scan_tracking_rssi);
-    pulse_loop = true;
-  } else {
-    // after the current pulse ends, don't loop
-    pulse_loop = false;
-  }
+  
+  // update the LED pulsing parameters
+  pulse_track = scan_tracking_index==-1 ? 0 : scan_tracking_rssi;
+  // pulse_update(scan_tracking_index, scan_tracking_rssi);
+  
+  
   // let people know what the best pick for ap would be
   char p[128];
   if(search_index >=0) {

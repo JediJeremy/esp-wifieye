@@ -24,7 +24,56 @@ curve_resolution = (platter==0) ? 30 : 90;
 // hint for small segments (doesn't work that well)
 $fs=0.5;
 
-if(platter == 0) {
+animation = "1";
+
+if(animation=="1") {
+	core_op = 1;
+	
+	neopixel_op = mix($t, 0.0,0.1, 0,1);	
+	
+	lids_op = mix($t, 0.1,0.2, 0,1);
+	servo_op = mix($t, 0.2,0.3, 0,1);	
+	servo_x = mix($t, 0.3,0.4, 10,0);	
+	lids_z = mix($t, 0.4,0.5, 20,0);	
+	
+	deck_op = mix($t, 0.6,0.7, 0,1);	
+	deck_y = mix($t, 0.6,0.7, 10,0);	
+	boards_op = mix($t, 0.65,0.75, 0,1);	
+
+	batt_op = mix($t, 0.65,0.75, 0,1);	
+	batt_y = mix($t, 0.65,0.75, -20,0);	
+	
+	
+	face_op = mix($t, 0.8,0.9, 0,1);	
+	face_z = mix($t, 0.8,0.9, 30,0);	
+	
+	
+	lid_angle=mix($t, 0.75,0.95, 50,1);
+	servo_angle=10;
+    // translate([0,-22,-1]) component_battery();
+	
+    if(core_op) color("gold",core_op) render() eye_core();
+    if(neopixel_op) translate([0,0,03]) component_neopixel(opacity=neopixel_op);
+	if(servo_op) {
+		translate([-24-servo_x,0,lids_z]) rotate([0,0,0])  component_servo(angle=lid_angle+servo_angle, opacity=servo_op);
+		translate([24+servo_x,0,lids_z]) rotate([0,0,180]) component_servo(angle=lid_angle+servo_angle, opacity=servo_op);
+	}
+    if(lids_op) translate([0,0,lids_z]) color("orange",lids_op) eye_lids(lid_angle,servo_angle=servo_angle,offset_x=servo_x/2);
+		
+	if(batt_op) translate([0,-20+batt_y,-6]) rotate([0,90,0]) color("blue",batt_op) cylinder(d=19,h=65,center=true); // battery round
+    if(deck_op) translate([0,deck_y,0]) color("gold",deck_op) render() middle_deck();
+	if(boards_op) translate([0,deck_y,0]) {
+		translate([16,22,2]) rotate([0,0,-190]) component_esp8266(opacity=boards_op);
+		color([0.2,0.4,0.2],boards_op)  translate([-16,22,0]) rotate([0,0,110]) cube([12,30,1],center=true); // battery charger
+	}
+	translate([0,0,face_z]) {
+		if(face_op) color("orange",face_op) amulet_body();
+		if(face_op) color("orange",face_op) amulet_crossbeams();    
+	}
+	
+} else if(animation=="2") {
+
+} else if(platter == 0) {
     // display mode
     rotate([90,0,0]) {
         display_components(05);
@@ -51,7 +100,6 @@ if(platter == 0) {
     // print platter 7
     rotate([-90,0,0]) necklace_cap();
 }    
-
 
 
 module letter(l,h=2,size=10) {
@@ -136,18 +184,16 @@ module eye_lid(servo_angle=10) {
 }
 
 module eye_lid_1() {
-   render(convexity = 2) eye_lid();
+   render() eye_lid();
 }
 
 module eye_lid_2() {
    rotate([0,0,180]) eye_lid_1();
 }
 
-module eye_lids(a=10,servo_angle=10) {
-    translate([0,0,4]) {
-        rotate([a,0,0]) eye_lid_1(servo_angle=servo_angle);
-        rotate([-a,0,0]) eye_lid_2(servo_angle=servo_angle);
-    }
+module eye_lids(a=10,servo_angle=10,offset_x=0) {
+	translate([-offset_x,0,4]) rotate([a,0,0]) eye_lid_1(servo_angle=servo_angle);
+	translate([+offset_x,0,4]) rotate([-a,0,0]) eye_lid_2(servo_angle=servo_angle);
 }
 
 module amulet_face() {
@@ -479,21 +525,21 @@ module component_battery() {
 }
 
 
-module component_esp8266() {
-    color("black") translate([0,0,-1])    cube([25,17,0.5],center=true);
-    color("grey") translate([4,0,0])    cube([15,11,2],center=true);
+module component_esp8266(opacity=1) {
+    color([0.2,0.4,0.2],opacity) translate([0,0,-1])    cube([25,17,0.5],center=true);
+    color("silver",opacity) translate([4,0,0])    cube([15,11,2],center=true);
 }
 
 
-module component_neopixel() {
-    color("green") translate([0,0,0])    cube([15,10,0.5],center=true);
-    color("white") translate([0,0,0.5])    cube([5,5,1],center=true);
+module component_neopixel(opacity=1) {
+    color([0.2,0.4,0.2],opacity) translate([0,0,0])    cube([15,10,0.5],center=true);
+    color("white",opacity) translate([0,0,0.5])    cube([5,5,1],center=true);
 }
 
 
-module component_servo(angle=0) {
+module component_servo(angle=0,opacity=1) {
     // servo body
-    color("silver") {
+    color("silver",opacity) {
         translate([0,0,0]) cube([15,6,13],center=true);
         translate([8,0,4]) rotate([0,90,0]) cylinder(h=2,d=3.5,center=true);
         difference() {
@@ -504,7 +550,7 @@ module component_servo(angle=0) {
         translate([-8,0,-4]) cube([5,2,6],center=true);
     }
     // servo horn
-    color("white") translate([10,0,4]) rotate([angle,0,0]) {
+    color("white",opacity) translate([10,0,4]) rotate([angle,0,0]) {
         difference() {
             union() {
                 difference() {
@@ -703,7 +749,29 @@ module print_1() {
 }
 
 
-// debug views
-*component_pockets();
-*eye_lid();
-*eye_lids(lid_angle,servo_angle=servo_angle);
+/* utility functions */
+
+function mix_linear(v,i1,i2,o1,o2) =
+    ( v < i1)
+    ? o1
+    : (v>i2)
+        ? o2
+        : (v-i1)/(i2-i1) * (o2-o1) + o1;
+
+function mix(v,i1,i2,o1,o2) =
+    ( i1<i2 ) 
+    ? mix_linear(v,i1,i2,o1,o2) 
+    : mix_linear(v,i2,i1,o2,o1);
+
+function clamp_linear(v,c1,c2) =
+    ( v < c1)
+    ? c1
+    : (v>c2)
+        ? c2
+        : v;
+
+function clamp(v,c1,c2) =
+    ( i1<i2 ) 
+    ? clamp_linear(v,c1,c2) 
+    : clamp_linear(v,c2,c1);
+

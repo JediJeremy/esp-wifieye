@@ -1,5 +1,3 @@
-#define IP_FORWARD  1 // ...probably doesn't work.
-
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
@@ -41,6 +39,8 @@ static String htaccess_password = String("esp");
 // set up websockets server
 #include "ws_server.h"
 
+// server content setup
+#include "server_content.h"
 
 
 void serial_setup(){
@@ -50,8 +50,6 @@ void serial_setup(){
   Serial.setDebugOutput(false);
 }
 
-// server content setup
-#include "server_content.h"
 
 // configure the ESP8266 to internal voltage mode
 ADC_MODE(ADC_VCC);
@@ -110,7 +108,7 @@ void setup(){
   // and status updates every 5s
   status_timer.attach(5.0, status_tick);
 
-  // everything is supergreen
+  // everything is supergreen (unless the ready state overrides the color)
   leds[0] = CRGB::Green; 
   fx_pose(String("ready"));
 }
@@ -120,7 +118,6 @@ void loop(){
   wifi_loop();
   // do light/servo effects
   fx_loop();
-  
   // status broadcast state
   switch(status_state) {
     case 1: // emit status now
@@ -139,11 +136,7 @@ void loop(){
       random16_add_entropy(status_vcc);
       break;
   }
-
   // if we can sleep for a moment, do so
-  /* if(wifi_state == 3) {
-    wifi_set_sleep_type(MODEM_SLEEP_T)
-  } */
   delay(10);
 }
 
