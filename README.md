@@ -1,7 +1,10 @@
 # esp-wifieye
 ESP8266 Wifi Eye
 
-This is an application framework for the ESP8266 which provides a web-based admin interface that can be used to remotely do the
+This is the firmware for the "WiFi Eye" project, documented here: 
+https://www.allaboutcircuits.com/projects/wifi-eye-part-1-intro-diagram-bom-features-iot/
+
+It is an application framework for the ESP8266 which provides a web-based admin interface that can be used to remotely do the
 "bootstrap" configuration (hostname, network, passwords, ota setup) of a fresh firmware install.
 
 The web server can serve multiple files concurrently, and also provides a websockets layer for real-time communication from the 
