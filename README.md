@@ -1,15 +1,24 @@
 # esp-wifieye
 ESP8266 Wifi Eye
+================
 
 This is the firmware for the "WiFi Eye" project, documented here: 
 https://www.allaboutcircuits.com/projects/wifi-eye-part-1-intro-diagram-bom-features-iot/
 
-It is an application framework for the ESP8266 which provides a web-based admin interface that can be used to remotely do the
-"bootstrap" configuration (hostname, network, passwords, ota setup) of a fresh firmware install.
+Major Features
+---------------
+- Multiple concurrent connection HTTP server with Websockets
+- WiFi access point, reconfigrable through web interface
+- Simultaneous WiFi Access Point, Client connection, and scanning.
+- Scans nearby access points every 10 seconds, reports via web interface, logs to flash.
+- Access Point presence triggers "pose" actions to change lights and move servos.
 
-The web server can serve multiple files concurrently, and also provides a websockets layer for real-time communication from the 
-microcontroller to (multiple) client browsers.
+This firmware provides an application framework for the ESP8266 which provides a web-based admin interface that can be used to remotely do the "bootstrap" configuration (hostname, network, passwords, ota setup) of a fresh firmware install. The web server can serve multiple files concurrently, and also provides a websockets layer for real-time communication from the microcontroller to (multiple) client browsers.
 
+This capability is used to provide an interactive real-time web interface that can "remote control" the device, and monitor it's state. There is also a fairly advanced animatronic system for controlling up 2 servos and 1 "neopixel" LEDs (changeable in the code) which can deliberately add random noise to make servos twitch, and leds flicker.
+
+Setup
+-----------
 Most ESP8266 projects have the access point information hard-coded into the firmware, which means to change to a new AP you need
 to recompile... not very friendly. They also tend to be "promiscuous" in their enabling of the OTA (over the air) reprogramming. 
 Which is really nice when you're developing (there's no passwords or anything!) but you need to be able to switch it off when 
